@@ -186,8 +186,8 @@ option_upgrade = click.option(
 option_parallelism_cluster = click.option(
     "--parallelism",
     help="Maximum number of processes to use while running the operation in parallel for cluster operations.",
-    type=click.IntRange(1, max(1, mp.cpu_count() // 4) if not generating_command_images() else 4),
-    default=max(1, mp.cpu_count() // 4) if not generating_command_images() else 2,
+    type=click.IntRange(1, max(1, (mp.cpu_count() + 1) // 3) if not generating_command_images() else 4),
+    default=max(1, (mp.cpu_count() + 1) // 3) if not generating_command_images() else 2,
     envvar="PARALLELISM",
     show_default=True,
 )
@@ -1266,7 +1266,9 @@ def shell(
         extra_args.append("--no-rcs")
     elif shell_binary.endswith("bash"):
         extra_args.extend(["--norc", "--noprofile"])
-    result = run_command([shell_binary, *extra_args, *shell_args], env=env, check=False)
+    result = run_command(
+        [shell_binary, *extra_args, *shell_args], env=env, check=False, cwd="kubernetes_tests"
+    )
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -1300,10 +1302,7 @@ def _run_tests(
         extra_shell_args.append("--no-rcs")
     elif shell_binary.endswith("bash"):
         extra_shell_args.extend(["--norc", "--noprofile"])
-    the_tests = []
-    if not any(arg.startswith("kubernetes_tests") for arg in test_args):
-        # if no tests specified - use args
-        the_tests.append("kubernetes_tests")
+    the_tests: list[str] = []
     command_to_run = " ".join([quote(arg) for arg in ["pytest", *the_tests, *test_args]])
     get_console(output).print(f"[info] Command to run:[/] {command_to_run}")
     result = run_command(
@@ -1311,6 +1310,7 @@ def _run_tests(
         output=output,
         env=env,
         check=False,
+        cwd="kubernetes_tests",
     )
     return result.returncode, f"Tests {kubectl_cluster_name}"
 
@@ -1336,7 +1336,7 @@ def _run_tests(
 @option_verbose
 @option_dry_run
 @click.argument("test_args", nargs=-1, type=click.Path())
-def tests(
+def kubernetes_tests_command(
     python: str,
     kubernetes_version: str,
     executor: str,

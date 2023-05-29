@@ -66,9 +66,6 @@ class CassandraToGCSOperator(BaseOperator):
     :param cassandra_conn_id: Reference to a specific Cassandra hook.
     :param gzip: Option to compress file for upload
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google Cloud.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -105,7 +102,6 @@ class CassandraToGCSOperator(BaseOperator):
         gzip: bool = False,
         cassandra_conn_id: str = "cassandra_default",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         query_timeout: float | None | NotSetType = NOT_SET,
         encode_uuid: bool = True,
@@ -120,7 +116,6 @@ class CassandraToGCSOperator(BaseOperator):
         self.approx_max_file_size_bytes = approx_max_file_size_bytes
         self.cassandra_conn_id = cassandra_conn_id
         self.gcp_conn_id = gcp_conn_id
-        self.delegate_to = delegate_to
         self.gzip = gzip
         self.impersonation_chain = impersonation_chain
         self.query_timeout = query_timeout
@@ -250,7 +245,6 @@ class CassandraToGCSOperator(BaseOperator):
         """Upload a file (data split or schema .json file) to Google Cloud Storage."""
         hook = GCSHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             impersonation_chain=self.impersonation_chain,
         )
         hook.upload(

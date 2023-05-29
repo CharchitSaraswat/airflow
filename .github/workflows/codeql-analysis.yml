@@ -33,7 +33,7 @@ concurrency:
 jobs:
   selective-checks:
     name: Selective checks
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       needs-python-scans: ${{ steps.selective-checks.outputs.needs-python-scans }}
       needs-javascript-scans: ${{ steps.selective-checks.outputs.needs-javascript-scans }}
@@ -50,11 +50,11 @@ jobs:
         env:
           COMMIT_REF: "${{ github.sha }}"
           VERBOSE: "false"
-        run: breeze ci selective-check >> ${GITHUB_OUTPUT}
+        run: breeze ci selective-check 2>> ${GITHUB_OUTPUT}
 
   analyze:
     name: Analyze
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [selective-checks]
     strategy:
       fail-fast: false

@@ -16,6 +16,8 @@
 # under the License.
 from __future__ import annotations
 
+from airflow.utils.airflow_flask_app import get_airflow_app
+
 #
 # Copyright (c) 2013, Michael Komitee
 # All rights reserved.
@@ -94,10 +96,7 @@ def init_app(app):
 
 
 def _unauthorized():
-    """
-    Indicate that authorization is required.
-    :return:
-    """
+    """Indicate that authorization is required."""
     return Response("Unauthorized", 401, {"WWW-Authenticate": "Negotiate"})
 
 
@@ -141,7 +140,7 @@ def requires_authentication(function: T):
             token = "".join(header.split()[1:])
             return_code = _gssapi_authenticate(token)
             if return_code == kerberos.AUTH_GSS_COMPLETE:
-                g.user = ctx.kerberos_user
+                g.user = get_airflow_app().appbuilder.sm.find_user(username=ctx.kerberos_user)
                 response = function(*args, **kwargs)
                 response = make_response(response)
                 if ctx.kerberos_token is not None:

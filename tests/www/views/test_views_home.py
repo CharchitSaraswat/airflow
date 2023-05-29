@@ -81,6 +81,12 @@ def test_home_status_filter_cookie(admin_client):
         admin_client.get("home?status=paused", follow_redirects=True)
         assert "paused" == flask.session[FILTER_STATUS_COOKIE]
 
+        admin_client.get("home?status=running", follow_redirects=True)
+        assert "running" == flask.session[FILTER_STATUS_COOKIE]
+
+        admin_client.get("home?status=failed", follow_redirects=True)
+        assert "failed" == flask.session[FILTER_STATUS_COOKIE]
+
         admin_client.get("home?status=all", follow_redirects=True)
         assert "all" == flask.session[FILTER_STATUS_COOKIE]
 
@@ -109,6 +115,31 @@ def client_single_dag(app, user_single_dag):
     )
 
 
+@pytest.fixture(scope="module")
+def user_single_dag_edit(app):
+    """Create User that can edit DAG resource only a single DAG"""
+    return create_user(
+        app,
+        username="user_single_dag_edit",
+        role_name="role_single_dag",
+        permissions=[
+            (permissions.ACTION_CAN_READ, permissions.RESOURCE_WEBSITE),
+            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
+            (permissions.ACTION_CAN_EDIT, permissions.resource_name_for_dag("filter_test_1")),
+        ],
+    )
+
+
+@pytest.fixture()
+def client_single_dag_edit(app, user_single_dag_edit):
+    """Client for User that can only edit the first DAG from TEST_FILTER_DAG_IDS"""
+    return client_with_login(
+        app,
+        username="user_single_dag_edit",
+        password="user_single_dag_edit",
+    )
+
+
 TEST_FILTER_DAG_IDS = ["filter_test_1", "filter_test_2", "a_first_dag_id_asc", "filter.test"]
 TEST_TAGS = ["example", "test", "team", "group"]
 
@@ -131,7 +162,55 @@ def working_dags(tmpdir):
 
 
 @pytest.fixture()
+def working_dags_with_read_perm(tmpdir):
+    dag_contents_template = "from airflow import DAG\ndag = DAG('{}', tags=['{}'])"
+    dag_contents_template_with_read_perm = (
+        "from airflow import DAG\ndag = DAG('{}', tags=['{}'], "
+        "access_control={{'role_single_dag':{{'can_read'}}}}) "
+    )
+    with create_session() as session:
+        for dag_id, tag in list(zip(TEST_FILTER_DAG_IDS, TEST_TAGS)):
+            filename = os.path.join(tmpdir, f"{dag_id}.py")
+            if dag_id == "filter_test_1":
+                with open(filename, "w") as f:
+                    f.writelines(dag_contents_template_with_read_perm.format(dag_id, tag))
+            else:
+                with open(filename, "w") as f:
+                    f.writelines(dag_contents_template.format(dag_id, tag))
+            _process_file(filename, session)
+
+
+@pytest.fixture()
+def working_dags_with_edit_perm(tmpdir):
+    dag_contents_template = "from airflow import DAG\ndag = DAG('{}', tags=['{}'])"
+    dag_contents_template_with_read_perm = (
+        "from airflow import DAG\ndag = DAG('{}', tags=['{}'], "
+        "access_control={{'role_single_dag':{{'can_edit'}}}}) "
+    )
+    with create_session() as session:
+        for dag_id, tag in list(zip(TEST_FILTER_DAG_IDS, TEST_TAGS)):
+            filename = os.path.join(tmpdir, f"{dag_id}.py")
+            if dag_id == "filter_test_1":
+                with open(filename, "w") as f:
+                    f.writelines(dag_contents_template_with_read_perm.format(dag_id, tag))
+            else:
+                with open(filename, "w") as f:
+                    f.writelines(dag_contents_template.format(dag_id, tag))
+            _process_file(filename, session)
+
+
+@pytest.fixture()
 def broken_dags(tmpdir, working_dags):
+    with create_session() as session:
+        for dag_id in TEST_FILTER_DAG_IDS:
+            filename = os.path.join(tmpdir, f"{dag_id}.py")
+            with open(filename, "w") as f:
+                f.writelines("airflow DAG")
+            _process_file(filename, session)
+
+
+@pytest.fixture()
+def broken_dags_with_read_perm(tmpdir, working_dags_with_read_perm):
     with create_session() as session:
         for dag_id in TEST_FILTER_DAG_IDS:
             filename = os.path.join(tmpdir, f"{dag_id}.py")
@@ -157,8 +236,18 @@ def test_home_importerrors(broken_dags, user_client):
         check_content_in_response(f"/{dag_id}.py", resp)
 
 
-@pytest.mark.parametrize("page", ["home", "home?status=active", "home?status=paused", "home?status=all"])
-def test_home_importerrors_filtered_singledag_user(broken_dags, client_single_dag, page):
+@pytest.mark.parametrize(
+    "page",
+    [
+        "home",
+        "home?status=all",
+        "home?status=active",
+        "home?status=paused",
+        "home?status=running",
+        "home?status=failed",
+    ],
+)
+def test_home_importerrors_filtered_singledag_user(broken_dags_with_read_perm, client_single_dag, page):
     # Users that can only see certain DAGs get a filtered list of import errors
     resp = client_single_dag.get(page, follow_redirects=True)
     check_content_in_response("Import Errors", resp)
@@ -176,7 +265,7 @@ def test_home_dag_list(working_dags, user_client):
         check_content_in_response(f"dag_id={dag_id}", resp)
 
 
-def test_home_dag_list_filtered_singledag_user(working_dags, client_single_dag):
+def test_home_dag_list_filtered_singledag_user(working_dags_with_read_perm, client_single_dag):
     # Users that can only see certain DAGs get a filtered list
     resp = client_single_dag.get("home", follow_redirects=True)
     # They can see the first DAG
@@ -194,6 +283,17 @@ def test_home_dag_list_search(working_dags, user_client):
     check_content_not_in_response("dag_id=a_first_dag_id_asc", resp)
 
 
+def test_home_dag_edit_permissions(capture_templates, working_dags_with_edit_perm, client_single_dag_edit):
+    with capture_templates() as templates:
+        client_single_dag_edit.get("home", follow_redirects=True)
+
+    dags = templates[0].local_context["dags"]
+    assert len(dags) > 0
+    dag_edit_perm_tuple = [(dag.dag_id, dag.can_edit) for dag in dags]
+    assert ("filter_test_1", True) in dag_edit_perm_tuple
+    assert ("filter_test_2", False) in dag_edit_perm_tuple
+
+
 def test_home_robots_header_in_response(user_client):
     # Responses should include X-Robots-Tag header
     resp = user_client.get("home", follow_redirects=True)
@@ -203,6 +303,11 @@ def test_home_robots_header_in_response(user_client):
 @pytest.mark.parametrize(
     "client, flash_message, expected",
     [
+        ("anonymous_client", UIAlert("hello world"), True),
+        ("anonymous_client", UIAlert("hello world", roles=["Viewer"]), True),
+        ("anonymous_client", UIAlert("hello world", roles=["User"]), False),
+        ("anonymous_client", UIAlert("hello world", roles=["Viewer", "User"]), True),
+        ("anonymous_client", UIAlert("hello world", roles=["Admin"]), False),
         ("user_client", UIAlert("hello world"), True),
         ("user_client", UIAlert("hello world", roles=["User"]), True),
         ("user_client", UIAlert("hello world", roles=["User", "Admin"]), True),

@@ -146,7 +146,7 @@ See: `Configuring PipelineOptions for execution on the Cloud Dataflow service <h
 Asynchronous execution
 """"""""""""""""""""""
 
-Dataflow batch jobs are by default asynchronous - however this is dependent on the application code (contained in the JAR
+Dataflow batch jobs are by default asynchronous; however, this is dependent on the application code (contained in the JAR
 or Python file) and how it is written. In order for the Dataflow job to execute asynchronously, ensure the
 pipeline objects are not being waited upon (not calling ``waitUntilFinish`` or ``wait_until_finish`` on the
 ``PipelineResult`` in your application code).
@@ -212,8 +212,8 @@ Here is an example of running Flex template with
 .. exampleinclude:: /../../tests/system/providers/google/cloud/dataflow/example_dataflow_template.py
     :language: python
     :dedent: 4
-    :start-after: [START howto_operator_start_template_job]
-    :end-before: [END howto_operator_start_template_job]
+    :start-after: [START howto_operator_start_flex_template_job]
+    :end-before: [END howto_operator_start_flex_template_job]
 
 .. _howto/operator:DataflowStartSqlJobOperator:
 

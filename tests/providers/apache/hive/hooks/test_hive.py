@@ -17,19 +17,28 @@
 # under the License.
 from __future__ import annotations
 
+import pytest
+
+from airflow import PY311
+
+if PY311:
+    pytest.skip(
+        "The tests are skipped because Apache Hive provider is not supported on Python 3.11",
+        allow_module_level=True,
+    )
+
 import datetime
 import itertools
 from collections import OrderedDict, namedtuple
 from unittest import mock
 
 import pandas as pd
-import pytest
 from hmsclient import HMSClient
 
 from airflow.exceptions import AirflowException
 from airflow.models.connection import Connection
 from airflow.models.dag import DAG
-from airflow.providers.apache.hive.hooks.hive import HiveMetastoreHook, HiveServer2Hook
+from airflow.providers.apache.hive.hooks.hive import HiveCliHook, HiveMetastoreHook, HiveServer2Hook
 from airflow.secrets.environment_variables import CONN_ENV_PREFIX
 from airflow.utils import timezone
 from airflow.utils.operator_helpers import AIRFLOW_VAR_NAME_FORMAT_MAPPING
@@ -324,7 +333,7 @@ class TestHiveCliHook:
             STORED AS textfile
             ;
         """
-        assert_equal_ignore_multiple_spaces(None, mock_run_cli.call_args_list[0][0][0], query)
+        assert_equal_ignore_multiple_spaces(mock_run_cli.call_args_list[0][0][0], query)
 
 
 class TestHiveMetastoreHook:
@@ -640,6 +649,37 @@ class TestHiveServer2Hook:
                 password="conn_pass",
                 database="default",
             )
+
+    @pytest.mark.parametrize(
+        "host, port, schema, message",
+        [
+            ("localhost", "10000", "default", None),
+            ("localhost:", "10000", "default", "The host used in beeline command"),
+            (";ocalhost", "10000", "default", "The host used in beeline command"),
+            (";ocalho/", "10000", "default", "The host used in beeline command"),
+            ("localhost", "as", "default", "The port used in beeline command"),
+            ("localhost", "0;", "default", "The port used in beeline command"),
+            ("localhost", "10/", "default", "The port used in beeline command"),
+            ("localhost", ":", "default", "The port used in beeline command"),
+            ("localhost", "-1", "default", "The port used in beeline command"),
+            ("localhost", "655536", "default", "The port used in beeline command"),
+            ("localhost", "1234", "default;", "The schema used in beeline command"),
+        ],
+    )
+    def test_get_conn_with_wrong_connection_parameters(self, host, port, schema, message):
+        connection = Connection(
+            conn_id="test",
+            conn_type="hive",
+            host=host,
+            port=port,
+            schema=schema,
+        )
+        hook = HiveCliHook()
+        if message:
+            with pytest.raises(Exception, match=message):
+                hook._validate_beeline_parameters(connection)
+        else:
+            hook._validate_beeline_parameters(connection)
 
     def test_get_records(self):
         hook = MockHiveServer2Hook()

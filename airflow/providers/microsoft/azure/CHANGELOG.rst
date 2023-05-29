@@ -24,15 +24,159 @@
 Changelog
 ---------
 
+6.1.1
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix deferrable mode execution in WasbPrefixSensor (#31411)``
+
+Misc
+~~~~
+
+* ``Optimize deferred mode execution for wasb sensors (#31009)``
+
+6.1.0
+.....
+.. note::
+  This release of provider is only available for Airflow 2.4+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
+
+Features
+~~~~~~~~
+
+* ``Add deferrable mode to 'WasbPrefixSensor' (#30252)``
+
+Misc
+~~~~
+
+* ``Bump minimum Airflow version in providers (#30917)``
+* ``Optimize deferrable execution mode 'AzureDataFactoryPipelineRunStatusSensor' (#30983)``
+* ``Optimize deferred execution for AzureDataFactoryRunPipelineOperator (#31214)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Move TaskInstanceKey to a separate file (#31033)``
+   * ``Use 'AirflowProviderDeprecationWarning' in providers (#30975)``
+   * ``Upgrade ruff to 0.0.262 (#30809)``
+   * ``Add full automation for min Airflow version for providers (#30994)``
+   * ``Use '__version__' in providers not 'version' (#31393)``
+   * ``Fixing circular import error in providers caused by airflow version check (#31379)``
+   * ``Prepare docs for May 2023 wave of Providers (#31252)``
+
+6.0.0
+......
+
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+.. warning::
+  In this version of the provider, deprecated GCS hook's param ``delegate_to`` is removed from ``AzureBlobStorageToGCSOperator``.
+  Impersonation can be achieved instead by utilizing the ``impersonation_chain`` param.
+
+* ``remove delegate_to from GCP operators and hooks (#30748)``
+
+Misc
+~~~~
+
+* ``Merge WasbBlobAsyncSensor to WasbBlobSensor (#30488)``
+
+5.3.1
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix AzureDataFactoryPipelineRunLink get_link method (#30514)``
+* ``Load subscription_id from extra__azure__subscriptionId (#30556)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Add mechanism to suspend providers (#30422)``
+   * ``Prepare docs for ad hoc release of Providers (#30545)``
+
+5.3.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add deferrable 'AzureDataFactoryRunPipelineOperator' (#30147)``
+* ``Add deferrable 'AzureDataFactoryPipelineRunStatusSensor' (#29801)``
+* ``Support deleting the local log files when using remote logging (#29772)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix ADF job failure during deferral (#30248)``
+* ``Fix AzureDataLakeStorageV2Hook 'account_url' with Active Directory authentication (#29980) (#29981)``
+
+Misc
+~~~~
+
+* ``merge AzureDataFactoryPipelineRunStatusAsyncSensor to AzureDataFactoryPipelineRunStatusSensor (#30250)``
+* ``Expose missing params in AzureSynapseHook API docs (#30099)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``organize azure provider.yaml (#30155)``
+
+5.2.1
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Handle deleting more than 256 blobs using 'WasbHook.delete_file()' (#29565)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Restore trigger logging (#29482)``
+   * ``Revert "Enable individual trigger logging (#27758)" (#29472)``
+
+5.2.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Enable individual trigger logging (#27758)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix params rendering in AzureSynapseHook Python API docs (#29041)``
+
+Misc
+~~~~
+
+* ``Deprecate 'delegate_to' param in GCP operators and update docs (#29088)``
+
+5.1.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add hook for Azure Data Lake Storage Gen2 (#28262)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Hide 'extra' field in WASB connection form (#28914)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Switch to ruff for faster static checks (#28893)``
+
 5.0.2
 .....
 
 Misc
 ~~~~
-* ``Re-enable azure service bus on ARM as it now builds cleanly (#28442)``
 
-.. Below changes are excluded from the changelog. Move them to
-   appropriate section above if needed. Do not delete the lines(!):
+* ``Re-enable azure service bus on ARM as it now builds cleanly (#28442)``
 
 5.0.1
 .....
@@ -50,8 +194,9 @@ Bug Fixes
 5.0.0
 .....
 
-This release of provider is only available for Airflow 2.3+ as explained in the
-`Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/README.md#support-for-providers>`_.
+.. note::
+  This release of provider is only available for Airflow 2.3+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 Breaking changes
 ~~~~~~~~~~~~~~~~
@@ -153,8 +298,9 @@ Bug Fixes
 Breaking changes
 ~~~~~~~~~~~~~~~~
 
-* This release of provider is only available for Airflow 2.2+ as explained in the Apache Airflow
-  providers support policy https://github.com/apache/airflow/blob/main/README.md#support-for-providers
+.. note::
+  This release of provider is only available for Airflow 2.2+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 Features
 ~~~~~~~~

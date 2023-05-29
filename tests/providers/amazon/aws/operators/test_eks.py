@@ -44,6 +44,7 @@ from tests.providers.amazon.aws.utils.eks_test_constants import (
     TASK_ID,
 )
 from tests.providers.amazon.aws.utils.eks_test_utils import convert_keys
+from tests.providers.amazon.aws.utils.test_waiter import assert_expected_waiter_type
 
 CLUSTER_NAME = "cluster1"
 NODEGROUP_NAME = "nodegroup1"
@@ -59,17 +60,6 @@ CREATE_NODEGROUP_KWARGS = {
     "capacityType": "ON_DEMAND",
     "instanceTypes": "t3.large",
 }
-
-
-def assert_expected_waiter_type(waiter: mock.MagicMock, expected: str):
-    """
-    There does not appear to be a straight-forward way to assert the type of waiter.
-    Instead, get the class name and check if it contains the expected name.
-
-    :param waiter: A mocked Boto3 Waiter object.
-    :param expected: The expected class name of the Waiter object, for example "ClusterActive".
-    """
-    assert expected in str(type(waiter.call_args[0][0]))
 
 
 class ClusterParams(TypedDict):
@@ -355,33 +345,33 @@ class TestEksCreateFargateProfileOperator:
         mock_create_fargate_profile.assert_called_with(**convert_keys(parameters))
         mock_waiter.assert_not_called()
 
-        @pytest.mark.parametrize(
-            "create_fargate_profile_kwargs",
-            [
-                pytest.param(None, id="without fargate profile kwargs"),
-                pytest.param(CREATE_FARGATE_PROFILE_KWARGS, id="with fargate profile kwargs"),
-            ],
-        )
-        @mock.patch.object(Waiter, "wait")
-        @mock.patch.object(EksHook, "create_fargate_profile")
-        def test_execute_with_wait_when_fargate_profile_does_not_already_exist(
-            self, mock_create_fargate_profile, mock_waiter, create_fargate_profile_kwargs
-        ):
-            op_kwargs = {**self.create_fargate_profile_params}
-            if create_fargate_profile_kwargs:
-                op_kwargs["create_fargate_profile_kwargs"] = create_fargate_profile_kwargs
-                parameters = {**self.create_fargate_profile_params, **create_fargate_profile_kwargs}
-            else:
-                assert "create_fargate_profile_kwargs" not in op_kwargs
-                parameters = self.create_fargate_profile_params
+    @pytest.mark.parametrize(
+        "create_fargate_profile_kwargs",
+        [
+            pytest.param(None, id="without fargate profile kwargs"),
+            pytest.param(CREATE_FARGATE_PROFILE_KWARGS, id="with fargate profile kwargs"),
+        ],
+    )
+    @mock.patch.object(Waiter, "wait")
+    @mock.patch.object(EksHook, "create_fargate_profile")
+    def test_execute_with_wait_when_fargate_profile_does_not_already_exist(
+        self, mock_create_fargate_profile, mock_waiter, create_fargate_profile_kwargs
+    ):
+        op_kwargs = {**self.create_fargate_profile_params}
+        if create_fargate_profile_kwargs:
+            op_kwargs["create_fargate_profile_kwargs"] = create_fargate_profile_kwargs
+            parameters = {**self.create_fargate_profile_params, **create_fargate_profile_kwargs}
+        else:
+            assert "create_fargate_profile_kwargs" not in op_kwargs
+            parameters = self.create_fargate_profile_params
 
-            operator = EksCreateFargateProfileOperator(task_id=TASK_ID, **op_kwargs, wait_for_completion=True)
-            operator.execute({})
-            mock_create_fargate_profile.assert_called_with(**convert_keys(parameters))
-            mock_waiter.assert_called_with(
-                mock.ANY, clusterName=CLUSTER_NAME, fargateProfileName=FARGATE_PROFILE_NAME
-            )
-            assert_expected_waiter_type(mock_waiter, "FargateProfileActive")
+        operator = EksCreateFargateProfileOperator(task_id=TASK_ID, **op_kwargs, wait_for_completion=True)
+        operator.execute({})
+        mock_create_fargate_profile.assert_called_with(**convert_keys(parameters))
+        mock_waiter.assert_called_with(
+            mock.ANY, clusterName=CLUSTER_NAME, fargateProfileName=FARGATE_PROFILE_NAME
+        )
+        assert_expected_waiter_type(mock_waiter, "FargateProfileActive")
 
 
 class TestEksCreateNodegroupOperator:
@@ -548,7 +538,7 @@ class TestEksDeleteFargateProfileOperator:
 
 
 class TestEksPodOperator:
-    @mock.patch("airflow.providers.cncf.kubernetes.operators.kubernetes_pod.KubernetesPodOperator.execute")
+    @mock.patch("airflow.providers.cncf.kubernetes.operators.pod.KubernetesPodOperator.execute")
     @mock.patch("airflow.providers.amazon.aws.hooks.eks.EksHook.generate_config_file")
     @mock.patch("airflow.providers.amazon.aws.hooks.eks.EksHook.__init__", return_value=None)
     def test_existing_nodegroup(

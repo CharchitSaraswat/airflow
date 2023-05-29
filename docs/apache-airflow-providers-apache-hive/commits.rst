@@ -28,14 +28,84 @@ For high-level changelog, see :doc:`package information including changelog <ind
 
 
 
-5.1.0
+6.1.0
 .....
 
-Latest change: 2022-12-27
+Latest change: 2023-05-18
+
+=================================================================================================  ===========  ======================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ======================================================================================
+`abea189022 <https://github.com/apache/airflow/commit/abea18902257c0250fedb764edda462f9e5abc84>`_  2023-05-18   ``Use '__version__' in providers not 'version' (#31393)``
+`f5aed58d9f <https://github.com/apache/airflow/commit/f5aed58d9fb2137fa5f0e3ce75b6709bf8393a94>`_  2023-05-18   ``Fixing circular import error in providers caused by airflow version check (#31379)``
+`d9ff55cf6d <https://github.com/apache/airflow/commit/d9ff55cf6d95bb342fed7a87613db7b9e7c8dd0f>`_  2023-05-16   ``Prepare docs for May 2023 wave of Providers (#31252)``
+`cb71d41c75 <https://github.com/apache/airflow/commit/cb71d41c75ca1b2ddf06b383e767a25c817e5b9f>`_  2023-05-03   ``Update return types of 'get_key' methods on 'S3Hook' (#30923)``
+`0a30706aa7 <https://github.com/apache/airflow/commit/0a30706aa7c581905ca99a8b6e2f05960d480729>`_  2023-05-03   ``Use 'AirflowProviderDeprecationWarning' in providers (#30975)``
+`eef5bc7f16 <https://github.com/apache/airflow/commit/eef5bc7f166dc357fea0cc592d39714b1a5e3c14>`_  2023-05-03   ``Add full automation for min Airflow version for providers (#30994)``
+`a7eb32a5b2 <https://github.com/apache/airflow/commit/a7eb32a5b222e236454d3e474eec478ded7c368d>`_  2023-04-30   ``Bump minimum Airflow version in providers (#30917)``
+`58294c5440 <https://github.com/apache/airflow/commit/58294c5440608b1a58828cbae36f91b7148c04b4>`_  2023-04-10   ``Decouple "job runner" from BaseJob ORM model (#30255)``
+`d23a3bbed8 <https://github.com/apache/airflow/commit/d23a3bbed89ae04369983f21455bf85ccc1ae1cb>`_  2023-04-04   ``Add mechanism to suspend providers (#30422)``
+=================================================================================================  ===========  ======================================================================================
+
+6.0.0
+.....
+
+Latest change: 2023-04-02
+
+=================================================================================================  ===========  =============================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  =============================================================
+`55dbf1ff1f <https://github.com/apache/airflow/commit/55dbf1ff1fb0b22714f695a66f6108b3249d1199>`_  2023-04-02   ``Prepare docs for April 2023 wave of Providers (#30378)``
+`f01140141f <https://github.com/apache/airflow/commit/f01140141f1fe51b6ee1eba5b02ab7516a67c9c7>`_  2023-03-21   ``Move auth parameter from extra to Hook parameter (#30212)``
+=================================================================================================  ===========  =============================================================
+
+5.1.3
+.....
+
+Latest change: 2023-02-18
 
 =================================================================================================  ===========  ================================================================
 Commit                                                                                             Committed    Subject
 =================================================================================================  ===========  ================================================================
+`470fdaea27 <https://github.com/apache/airflow/commit/470fdaea275660970777c0f72b8867b382eabc14>`_  2023-02-18   ``Prepare docs for 02 2023 midmonth wave of Providers (#29589)``
+`1cb127b9fd <https://github.com/apache/airflow/commit/1cb127b9fd22a7dc8e0b82cab8acb7cd4c317c9c>`_  2023-02-15   ``Validate Hive Beeline parameters (#29502)``
+=================================================================================================  ===========  ================================================================
+
+5.1.2
+.....
+
+Latest change: 2023-02-08
+
+=================================================================================================  ===========  =======================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  =======================================================================
+`ce6ae2457e <https://github.com/apache/airflow/commit/ce6ae2457ef3d9f44f0086b58026909170bbf22a>`_  2023-02-08   ``Prepare docs for Feb 2023 wave of Providers (#29379)``
+`23da4daaa0 <https://github.com/apache/airflow/commit/23da4daaa018e72b39b977afcde85deaf2224f1e>`_  2023-01-18   ``Revert "Remove conn.close() ignores (#29005)" (#29010)``
+`85f8df7b8a <https://github.com/apache/airflow/commit/85f8df7b8a18e1147c7e014a7af7fc4e66aaa8be>`_  2023-01-18   ``Remove conn.close() ignores (#29005)``
+`aa97474020 <https://github.com/apache/airflow/commit/aa97474020712d3f450ab169a5a054580e7b7d28>`_  2023-01-18   ``Fixed MyPy errors introduced by new mysql-connector-python (#28995)``
+=================================================================================================  ===========  =======================================================================
+
+5.1.1
+.....
+
+Latest change: 2023-01-14
+
+=================================================================================================  ===========  ==================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ==================================================================
+`911b708ffd <https://github.com/apache/airflow/commit/911b708ffddd4e7cb6aaeac84048291891eb0f1f>`_  2023-01-14   ``Prepare docs for Jan 2023 mid-month wave of Providers (#28929)``
+`45dd0c484e <https://github.com/apache/airflow/commit/45dd0c484e16ff56800cc9c047f56b4a909d2d0d>`_  2023-01-11   ``Move local_infile option from extra to hook parameter (#28811)``
+=================================================================================================  ===========  ==================================================================
+
+5.1.0
+.....
+
+Latest change: 2023-01-02
+
+=================================================================================================  ===========  ================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ================================================================
+`5246c009c5 <https://github.com/apache/airflow/commit/5246c009c557b4f6bdf1cd62bf9b89a2da63f630>`_  2023-01-02   ``Prepare docs for Jan 2023 wave of Providers (#28651)``
 `4e545c6e54 <https://github.com/apache/airflow/commit/4e545c6e54712eedb6ca9cbb8333393ae3f6cba2>`_  2022-12-27   ``Move Hive macros to the provider (#28538)``
 `d9ae90fc64 <https://github.com/apache/airflow/commit/d9ae90fc6478133767e29774920ed797175146bc>`_  2022-12-21   ``Make pandas dependency optional for Amazon Provider (#28505)``
 =================================================================================================  ===========  ================================================================

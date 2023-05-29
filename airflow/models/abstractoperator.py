@@ -19,15 +19,17 @@ from __future__ import annotations
 
 import datetime
 import inspect
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Collection, Iterable, Iterator, Sequence
 
-from airflow.compat.functools import cache, cached_property
+from airflow.compat.functools import cache
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException
 from airflow.models.expandinput import NotFullyPopulated
 from airflow.models.taskmixin import DAGNode
 from airflow.template.templater import Templater
 from airflow.utils.context import Context
+from airflow.utils.log.secrets_masker import redact
 from airflow.utils.session import NEW_SESSION, provide_session
 from airflow.utils.sqlalchemy import skip_locked, with_row_locks
 from airflow.utils.state import State, TaskInstanceState
@@ -137,7 +139,7 @@ class AbstractOperator(Templater, DAGNode):
 
     @property
     def dag_id(self) -> str:
-        """Returns dag id if it has one or an adhoc + owner"""
+        """Returns dag id if it has one or an adhoc + owner."""
         dag = self.get_dag()
         if dag:
             return dag.dag_id
@@ -242,7 +244,7 @@ class AbstractOperator(Templater, DAGNode):
     def iter_mapped_task_groups(self) -> Iterator[MappedTaskGroup]:
         """Return mapped task groups this task belongs to.
 
-        Groups are returned from the closest to the outmost.
+        Groups are returned from the innermost to the outmost.
 
         :meta private:
         """
@@ -253,7 +255,10 @@ class AbstractOperator(Templater, DAGNode):
             parent = parent.task_group
 
     def get_closest_mapped_task_group(self) -> MappedTaskGroup | None:
-        """:meta private:"""
+        """Get the mapped task group "closest" to this task in the DAG.
+
+        :meta private:
+        """
         return next(self.iter_mapped_task_groups(), None)
 
     def unmap(self, resolve: None | dict[str, Any] | tuple[Context, Session]) -> BaseOperator:
@@ -295,7 +300,7 @@ class AbstractOperator(Templater, DAGNode):
 
     @cached_property
     def operator_extra_link_dict(self) -> dict[str, Any]:
-        """Returns dictionary of all extra links for the operator"""
+        """Returns dictionary of all extra links for the operator."""
         op_extra_links_from_plugin: dict[str, Any] = {}
         from airflow import plugins_manager
 
@@ -314,7 +319,7 @@ class AbstractOperator(Templater, DAGNode):
 
     @cached_property
     def global_operator_extra_link_dict(self) -> dict[str, Any]:
-        """Returns dictionary of all global extra links"""
+        """Returns dictionary of all global extra links."""
         from airflow import plugins_manager
 
         plugins_manager.initialize_extra_operators_links_plugins()
@@ -563,8 +568,23 @@ class AbstractOperator(Templater, DAGNode):
                     f"{attr_name!r} is configured as a template field "
                     f"but {parent.task_type} does not have this attribute."
                 )
-            if not value:
-                continue
+
+            try:
+                if not value:
+                    continue
+            except Exception:
+                # This may happen if the templated field points to a class which does not support `__bool__`,
+                # such as Pandas DataFrames:
+                # https://github.com/pandas-dev/pandas/blob/9135c3aaf12d26f857fcc787a5b64d521c51e379/pandas/core/generic.py#L1465
+                self.log.info(
+                    "Unable to check if the value of type '%s' is False for task '%s', field '%s'.",
+                    type(value).__name__,
+                    self.task_id,
+                    attr_name,
+                )
+                # We may still want to render custom classes which do not support __bool__
+                pass
+
             try:
                 rendered_content = self.render_template(
                     value,
@@ -573,11 +593,12 @@ class AbstractOperator(Templater, DAGNode):
                     seen_oids,
                 )
             except Exception:
+                value_masked = redact(name=attr_name, value=value)
                 self.log.exception(
                     "Exception rendering Jinja template for task '%s', field '%s'. Template: %r",
                     self.task_id,
                     attr_name,
-                    value,
+                    value_masked,
                 )
                 raise
             else:

@@ -36,7 +36,7 @@ jobs:
   build-info:
     timeout-minutes: 10
     name: "Build Info"
-    runs-on: ${{ github.repository == 'apache/airflow' && 'self-hosted' || 'ubuntu-20.04' }}
+    runs-on: ${{ github.repository == 'apache/airflow' && 'self-hosted' || 'ubuntu-22.04' }}
     outputs:
       pythonVersions: ${{ steps.selective-checks.outputs.python-versions }}
       allPythonVersions: ${{ steps.selective-checks.outputs.all-python-versions }}
@@ -59,23 +59,24 @@ jobs:
         id: selective-checks
         env:
           VERBOSE: "false"
-        run: breeze ci selective-check >> ${GITHUB_OUTPUT}
+        run: breeze ci selective-check 2>> ${GITHUB_OUTPUT}
   release-images:
     timeout-minutes: 120
     name: "Release images: ${{ github.event.inputs.airflowVersion }}, ${{ matrix.python-version }}"
-    runs-on: ${{ github.repository == 'apache/airflow' && 'self-hosted' || 'ubuntu-20.04' }}
+    runs-on: ${{ github.repository == 'apache/airflow' && 'self-hosted' || 'ubuntu-22.04' }}
     needs: [build-info]
     strategy:
       fail-fast: false
       matrix:
         python-version: ${{ fromJson(needs.build-info.outputs.pythonVersions) }}
     env:
-      RUNS_ON: ${{ github.repository == 'apache/airflow' && 'self-hosted' || 'ubuntu-20.04' }}
+      RUNS_ON: ${{ github.repository == 'apache/airflow' && 'self-hosted' || 'ubuntu-22.04' }}
     if: contains(fromJSON('[
       "ashb",
       "ephraimbuddy",
       "jedcunningham",
       "kaxil",
+      "pierrejeambrun",
       "potiuk",
       ]'), github.event.sender.login)
     steps:

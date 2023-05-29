@@ -33,12 +33,14 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import yaml
+from packaging.version import parse as parse_version
 
 import airflow
 from airflow.configuration import AirflowConfigParser, default_config_yaml
@@ -188,6 +190,8 @@ if PACKAGE_NAME == "apache-airflow":
     exclude_patterns = [
         # We only link to selected subpackages.
         "_api/airflow/index.rst",
+        # Included in the cluster-policies doc
+        "_api/airflow/policies/index.rst",
         "README.rst",
     ]
 elif PACKAGE_NAME.startswith("apache-airflow-providers-"):
@@ -217,10 +221,11 @@ def _get_rst_filepath_from_path(filepath: pathlib.Path):
 if PACKAGE_NAME == "apache-airflow":
     # Exclude top-level packages
     # do not exclude these top-level modules from the doc build:
-    _allowed_top_level = ("exceptions.py",)
+    _allowed_top_level = ("exceptions.py", "policies.py")
 
     browsable_packages = {
         "hooks",
+        "decorators",
         "example_dags",
         "executors",
         "models",
@@ -229,9 +234,22 @@ if PACKAGE_NAME == "apache-airflow":
         "secrets",
         "sensors",
         "timetables",
+        "triggers",
         "utils",
     }
-    browseable_utils = {"dag_parsing_context.py"}
+    browsable_utils: set[str] = set()
+
+    models_included: set[str] = {
+        "baseoperator.py",
+        "connection.py",
+        "dag.py",
+        "dagbag.py",
+        "param.py",
+        "taskinstance.py",
+        "taskinstancekey.py",
+        "variable.py",
+        "xcom.py",
+    }
 
     root = ROOT_DIR / "airflow"
     for path in root.iterdir():
@@ -240,10 +258,16 @@ if PACKAGE_NAME == "apache-airflow":
         if path.is_dir() and path.name not in browsable_packages:
             exclude_patterns.append(f"_api/airflow/{path.name}")
 
-    # Don't include all of utils, just the specific ones we include in python-api-ref
+    # Don't include all of utils, just the specific ones we decoded to include
     for path in (root / "utils").iterdir():
-        if path.name not in browseable_utils:
+        if path.name not in browsable_utils:
             exclude_patterns.append(_get_rst_filepath_from_path(path))
+
+    for path in (root / "models").iterdir():
+        if path.name not in models_included:
+            exclude_patterns.append(_get_rst_filepath_from_path(path))
+
+
 elif PACKAGE_NAME != "docker-stack":
     exclude_patterns.extend(
         _get_rst_filepath_from_path(f) for f in pathlib.Path(PACKAGE_DIR).glob("**/example_dags")
@@ -383,6 +407,13 @@ html_context = {
 # -- Options for sphinx_jinja ------------------------------------------
 # See: https://github.com/tardyp/sphinx-jinja
 
+airflow_version = parse_version(
+    re.search(  # type: ignore[union-attr,arg-type]
+        r"__version__ = \"([0-9\.]*)(\.dev[0-9]*)?\"",
+        (Path(__file__).parents[1] / "airflow" / "__init__.py").read_text(),
+    ).groups(0)[0]
+)
+
 # Jinja context
 if PACKAGE_NAME == "apache-airflow":
     deprecated_options: dict[str, dict[str, tuple[str, str, str]]] = defaultdict(dict)
@@ -391,6 +422,10 @@ if PACKAGE_NAME == "apache-airflow":
     ) in AirflowConfigParser.deprecated_options.items():
         deprecated_options[deprecated_section][deprecated_key] = section, key, since_version
 
+    for (section, key), deprecated in AirflowConfigParser.many_to_one_deprecated_options.items():
+        for deprecated_section, deprecated_key, since_version in deprecated:
+            deprecated_options[deprecated_section][deprecated_key] = section, key, since_version
+
     configs = default_config_yaml()
 
     # We want the default/example we show in the docs to reflect the value _after_
@@ -398,10 +433,14 @@ if PACKAGE_NAME == "apache-airflow":
     # e.g. {{dag_id}} in default_config.cfg -> {dag_id} in airflow.cfg, and what we want in docs
     keys_to_format = ["default", "example"]
     for conf_name, conf_section in configs.items():
-        for option_name, option in conf_section["options"].items():
+        for option_name, option in list(conf_section["options"].items()):
             for key in keys_to_format:
                 if option[key] and "{{" in option[key]:
                     option[key] = option[key].replace("{{", "{").replace("}}", "}")
+            version_added = option["version_added"]
+            if version_added is not None and parse_version(version_added) > airflow_version:
+                del conf_section["options"][option_name]
+
     # Sort options, config and deprecated options for JINJA variables to display
     for section_name, config in configs.items():
         config["options"] = {k: v for k, v in sorted(config["options"].items())}
@@ -696,6 +735,7 @@ if PACKAGE_NAME == "apache-airflow":
 # A list of patterns to ignore when finding files
 autoapi_ignore = [
     "*/airflow/_vendor/*",
+    "*/airflow/executors/*",
     "*/_internal*",
     "*/node_modules/*",
     "*/migrations/*",
@@ -710,6 +750,7 @@ elif PACKAGE_NAME == "docker-stack":
     autoapi_ignore.append("*/airflow/providers/*")
 else:
     autoapi_ignore.append("*/airflow/providers/cncf/kubernetes/backcompat/*")
+    autoapi_ignore.append("*/airflow/providers/google/ads/*")
     autoapi_ignore.append("*/example_dags/*")
 # Keep the AutoAPI generated files on the filesystem after the run.
 # Useful for debugging.
@@ -778,7 +819,11 @@ if PACKAGE_NAME == "apache-airflow":
 
 
 def skip_util_classes(app, what, name, obj, skip, options):
-    if (what == "data" and "STATICA_HACK" in name) or ":sphinx-autoapi-skip:" in obj.docstring:
+    if what == "data" and "STATICA_HACK" in name:
+        skip = True
+    elif ":sphinx-autoapi-skip:" in obj.docstring:
+        skip = True
+    elif ":meta private:" in obj.docstring:
         skip = True
     return skip
 

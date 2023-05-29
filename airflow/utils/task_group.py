@@ -137,6 +137,7 @@ class TaskGroup(DAGNode):
         self._check_for_group_id_collisions(add_suffix_on_collision)
 
         self.children: dict[str, DAGNode] = {}
+
         if parent_group:
             parent_group.add(self)
 
@@ -186,7 +187,7 @@ class TaskGroup(DAGNode):
 
     @property
     def is_root(self) -> bool:
-        """Returns True if this TaskGroup is the root TaskGroup. Otherwise False"""
+        """Returns True if this TaskGroup is the root TaskGroup. Otherwise False."""
         return not self.group_id
 
     @property
@@ -243,7 +244,8 @@ class TaskGroup(DAGNode):
     @property
     def group_id(self) -> str | None:
         """group_id of this TaskGroup."""
-        if self.task_group and self.task_group.prefix_group_id and self.task_group.group_id:
+        if self.task_group and self.task_group.prefix_group_id and self.task_group._group_id:
+            # defer to parent whether it adds a prefix
             return self.task_group.child_id(self._group_id)
 
         return self._group_id
@@ -253,7 +255,9 @@ class TaskGroup(DAGNode):
         """group_id excluding parent's group_id used as the node label in UI."""
         return self._group_id
 
-    def update_relative(self, other: DependencyMixin, upstream=True) -> None:
+    def update_relative(
+        self, other: DependencyMixin, upstream: bool = True, edge_modifier: EdgeModifier | None = None
+    ) -> None:
         """
         Overrides TaskMixin.update_relative.
 
@@ -264,8 +268,12 @@ class TaskGroup(DAGNode):
             # Handles setting relationship between a TaskGroup and another TaskGroup
             if upstream:
                 parent, child = (self, other)
+                if edge_modifier:
+                    edge_modifier.add_edge_info(self.dag, other.downstream_join_id, self.upstream_join_id)
             else:
                 parent, child = (other, self)
+                if edge_modifier:
+                    edge_modifier.add_edge_info(self.dag, self.downstream_join_id, other.upstream_join_id)
 
             parent.upstream_group_ids.add(child.group_id)
             child.downstream_group_ids.add(parent.group_id)
@@ -278,10 +286,18 @@ class TaskGroup(DAGNode):
                         f"or operators; received {task.__class__.__name__}"
                     )
 
+                # Do not set a relationship between a TaskGroup and a Label's roots
+                if self == task:
+                    continue
+
                 if upstream:
                     self.upstream_task_ids.add(task.node_id)
+                    if edge_modifier:
+                        edge_modifier.add_edge_info(self.dag, task.node_id, self.upstream_join_id)
                 else:
                     self.downstream_task_ids.add(task.node_id)
+                    if edge_modifier:
+                        edge_modifier.add_edge_info(self.dag, self.downstream_join_id, task.node_id)
 
     def _set_relatives(
         self,
@@ -297,7 +313,7 @@ class TaskGroup(DAGNode):
             task_or_task_list = [task_or_task_list]
 
         for task_like in task_or_task_list:
-            self.update_relative(task_like, upstream)
+            self.update_relative(task_like, upstream, edge_modifier=edge_modifier)
 
         if upstream:
             for task in self.get_roots():
@@ -322,12 +338,12 @@ class TaskGroup(DAGNode):
 
     @property
     def roots(self) -> list[BaseOperator]:
-        """Required by TaskMixin"""
+        """Required by TaskMixin."""
         return list(self.get_roots())
 
     @property
     def leaves(self) -> list[BaseOperator]:
-        """Required by TaskMixin"""
+        """Required by TaskMixin."""
         return list(self.get_leaves())
 
     def get_roots(self) -> Generator[BaseOperator, None, None]:
@@ -342,7 +358,7 @@ class TaskGroup(DAGNode):
     def get_leaves(self) -> Generator[BaseOperator, None, None]:
         """
         Returns a generator of tasks that are leaf tasks, i.e. those with no downstream
-        dependencies within the TaskGroup
+        dependencies within the TaskGroup.
         """
         for task in self:
             if not any(self.has_task(child) for child in task.get_direct_relatives(upstream=False)):
@@ -353,15 +369,17 @@ class TaskGroup(DAGNode):
         Prefix label with group_id if prefix_group_id is True. Otherwise return the label
         as-is.
         """
-        if self.prefix_group_id and self.group_id:
-            return f"{self.group_id}.{label}"
+        if self.prefix_group_id:
+            group_id = self.group_id
+            if group_id:
+                return f"{group_id}.{label}"
 
         return label
 
     @property
     def upstream_join_id(self) -> str:
         """
-        If this TaskGroup has immediate upstream TaskGroups or tasks, a dummy node called
+        If this TaskGroup has immediate upstream TaskGroups or tasks, a proxy node called
         upstream_join_id will be created in Graph view to join the outgoing edges from this
         TaskGroup to reduce the total number of edges needed to be displayed.
         """
@@ -370,14 +388,14 @@ class TaskGroup(DAGNode):
     @property
     def downstream_join_id(self) -> str:
         """
-        If this TaskGroup has immediate downstream TaskGroups or tasks, a dummy node called
+        If this TaskGroup has immediate downstream TaskGroups or tasks, a proxy node called
         downstream_join_id will be created in Graph view to join the outgoing edges from this
         TaskGroup to reduce the total number of edges needed to be displayed.
         """
         return f"{self.group_id}.downstream_join_id"
 
     def get_task_group_dict(self) -> dict[str, TaskGroup]:
-        """Returns a flat dictionary of group_id: TaskGroup"""
+        """Returns a flat dictionary of group_id: TaskGroup."""
         task_group_map = {}
 
         def build_map(task_group):
@@ -393,7 +411,7 @@ class TaskGroup(DAGNode):
         return task_group_map
 
     def get_child_by_label(self, label: str) -> DAGNode:
-        """Get a child task/TaskGroup by its label (i.e. task_id/group_id without the group_id prefix)"""
+        """Get a child task/TaskGroup by its label (i.e. task_id/group_id without the group_id prefix)."""
         return self.children[self.child_id(label)]
 
     def serialize_for_task_group(self) -> tuple[DagAttributeTypes, Any]:

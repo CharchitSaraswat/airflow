@@ -25,7 +25,7 @@ from airflow.utils.sqlalchemy import UtcDateTime
 
 
 class Log(Base):
-    """Used to actively log events to the database"""
+    """Used to actively log events to the database."""
 
     __tablename__ = "log"
 
@@ -41,6 +41,7 @@ class Log(Base):
 
     __table_args__ = (
         Index("idx_log_dag", dag_id),
+        Index("idx_log_dttm", dttm),
         Index("idx_log_event", event),
     )
 

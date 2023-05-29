@@ -29,14 +29,15 @@ from argparse import ArgumentParser
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest import mock
+from unittest.mock import sentinel
 
 import pendulum
 import pytest
-from parameterized import parameterized
 
 from airflow import DAG
 from airflow.cli import cli_parser
 from airflow.cli.commands import task_command
+from airflow.cli.commands.task_command import LoggerMutationHelper
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException, DagRunNotFound
 from airflow.models import DagBag, DagRun, Pool, TaskInstance
@@ -87,8 +88,13 @@ class TestCliTasks:
 
         cls.dag = cls.dagbag.get_dag(cls.dag_id)
         cls.dagbag.sync_to_db()
+        data_interval = cls.dag.timetable.infer_manual_data_interval(run_after=DEFAULT_DATE)
         cls.dag_run = cls.dag.create_dagrun(
-            state=State.NONE, run_id=cls.run_id, run_type=DagRunType.MANUAL, execution_date=DEFAULT_DATE
+            state=State.NONE,
+            run_id=cls.run_id,
+            run_type=DagRunType.MANUAL,
+            execution_date=DEFAULT_DATE,
+            data_interval=data_interval,
         )
 
     @classmethod
@@ -177,11 +183,14 @@ class TestCliTasks:
             dag = dagbag.get_dag("test_dags_folder")
             dagbag.sync_to_db(session=session)
 
+        execution_date = pendulum.now("UTC")
+        data_interval = dag.timetable.infer_manual_data_interval(run_after=execution_date)
         dag.create_dagrun(
             state=State.NONE,
             run_id="abc123",
             run_type=DagRunType.MANUAL,
-            execution_date=pendulum.now("UTC"),
+            execution_date=execution_date,
+            data_interval=data_interval,
             session=session,
         )
         session.commit()
@@ -236,8 +245,8 @@ class TestCliTasks:
             # verify that the file was in different location when run
             assert ti.xcom_pull(ti.task_id) == new_file_path.as_posix()
 
-    @mock.patch("airflow.cli.commands.task_command.LocalTaskJob")
-    def test_run_with_existing_dag_run_id(self, mock_local_job):
+    @mock.patch("airflow.cli.commands.task_command.LocalTaskJobRunner")
+    def test_run_with_existing_dag_run_id(self, mock_local_job_runner):
         """
         Test that we can run with existing dag_run_id
         """
@@ -251,9 +260,10 @@ class TestCliTasks:
             task0_id,
             self.run_id,
         ]
-
+        mock_local_job_runner.return_value.job_type = "LocalTaskJob"
         task_command.task_run(self.parser.parse_args(args0), dag=self.dag)
-        mock_local_job.assert_called_once_with(
+        mock_local_job_runner.assert_called_once_with(
+            job=mock.ANY,
             task_instance=mock.ANY,
             mark_success=False,
             ignore_all_deps=True,
@@ -266,7 +276,7 @@ class TestCliTasks:
             external_executor_id=None,
         )
 
-    @mock.patch("airflow.cli.commands.task_command.LocalTaskJob")
+    @mock.patch("airflow.cli.commands.task_command.LocalTaskJobRunner")
     def test_run_raises_when_theres_no_dagrun(self, mock_local_job):
         """
         Test that run raises when there's run_id but no dag_run
@@ -334,12 +344,13 @@ class TestCliTasks:
         assert "foo=bar" in output
         assert "AIRFLOW_TEST_MODE=True" in output
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "option",
         [
-            ("--ignore-all-dependencies",),
-            ("--ignore-depends-on-past",),
-            ("--ignore-dependencies",),
-            ("--force",),
+            "--ignore-all-dependencies",
+            "--ignore-depends-on-past",
+            "--ignore-dependencies",
+            "--force",
         ],
     )
     def test_cli_run_invalid_raw_option(self, option: str):
@@ -490,9 +501,11 @@ class TestCliTasks:
         task2 = dag2.get_task(task_id="print_the_context")
         default_date2 = timezone.datetime(2016, 1, 9)
         dag2.clear()
+        data_interval = dag2.timetable.infer_manual_data_interval(run_after=default_date2)
         dagrun = dag2.create_dagrun(
             state=State.RUNNING,
             execution_date=default_date2,
+            data_interval=data_interval,
             run_type=DagRunType.MANUAL,
             external_trigger=True,
         )
@@ -577,9 +590,12 @@ class TestLogsfromTaskRunCommand:
         self.ti_log_file_path = os.path.join(self.log_dir, self.log_filename)
         self.parser = cli_parser.get_parser()
 
-        DagBag().get_dag(self.dag_id).create_dagrun(
+        dag = DagBag().get_dag(self.dag_id)
+        data_interval = dag.timetable.infer_manual_data_interval(run_after=self.execution_date)
+        dag.create_dagrun(
             run_id=self.run_id,
             execution_date=self.execution_date,
+            data_interval=data_interval,
             start_date=timezone.utcnow(),
             state=State.RUNNING,
             run_type=DagRunType.MANUAL,
@@ -623,13 +639,15 @@ class TestLogsfromTaskRunCommand:
             assert "logging_mixin.py" not in log_line
         return log_line
 
-    @mock.patch("airflow.cli.commands.task_command.LocalTaskJob")
+    @mock.patch("airflow.cli.commands.task_command.LocalTaskJobRunner")
     def test_external_executor_id_present_for_fork_run_task(self, mock_local_job):
+        mock_local_job.return_value.job_type = "LocalTaskJob"
         args = self.parser.parse_args(self.task_args)
         args.external_executor_id = "ABCD12345"
 
         task_command.task_run(args)
         mock_local_job.assert_called_once_with(
+            job=mock.ANY,
             task_instance=mock.ANY,
             mark_success=False,
             pickle_id=None,
@@ -642,14 +660,16 @@ class TestLogsfromTaskRunCommand:
             external_executor_id="ABCD12345",
         )
 
-    @mock.patch("airflow.cli.commands.task_command.LocalTaskJob")
+    @mock.patch("airflow.cli.commands.task_command.LocalTaskJobRunner")
     def test_external_executor_id_present_for_process_run_task(self, mock_local_job):
+        mock_local_job.return_value.job_type = "LocalTaskJob"
         args = self.parser.parse_args(self.task_args)
         args.external_executor_id = "ABCD12345"
 
         with mock.patch.dict(os.environ, {"external_executor_id": "12345FEDCBA"}):
             task_command.task_run(args)
             mock_local_job.assert_called_once_with(
+                job=mock.ANY,
                 task_instance=mock.ANY,
                 mark_success=False,
                 pickle_id=None,
@@ -661,6 +681,48 @@ class TestLogsfromTaskRunCommand:
                 pool=None,
                 external_executor_id="ABCD12345",
             )
+
+    @pytest.mark.parametrize("is_k8s", ["true", ""])
+    def test_logging_with_run_task_stdout_k8s_executor_pod(self, is_k8s):
+        """
+        When running task --local as k8s executor pod, all logging should make it to stdout.
+        Otherwise, all logging after "running TI" is redirected to logs (and the actual log
+        file content is tested elsewhere in this module).
+
+        Unfortunately, to test stdout, we have to test this by running as a subprocess because
+        the stdout redirection & log capturing behavior is not compatible with pytest's stdout
+        capturing behavior.  Running as subprocess takes pytest out of the equation and
+        verifies with certainty the behavior.
+        """
+        import subprocess
+
+        with mock.patch.dict("os.environ", AIRFLOW_IS_K8S_EXECUTOR_POD=is_k8s):
+            with subprocess.Popen(
+                args=["airflow", *self.task_args, "-S", self.dag_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ) as process:
+                output, err = process.communicate()
+        lines = []
+        found_start = False
+        for line_ in output.splitlines():
+            line = line_.decode("utf-8")
+            if "Running <TaskInstance: test_logging_dag.test_task test_run" in line:
+                found_start = True
+            if found_start:
+                lines.append(line)
+        if is_k8s:
+            # 10 is arbitrary, but, with enough padding to hopefully not be flakey
+            assert len(lines) > 10
+            self.assert_log_line("Starting attempt 1 of 1", lines)
+            self.assert_log_line("Exporting env vars", lines)
+            self.assert_log_line("Log from DAG Logger", lines)
+            self.assert_log_line("Log from TI Logger", lines)
+            self.assert_log_line("Log from Print statement", lines, expect_from_logging_mixin=True)
+            self.assert_log_line("Task exited with return code 0", lines)
+        else:
+            # when not k8s executor pod, most output is redirected to logs
+            assert len(lines) == 1
 
     @unittest.skipIf(not hasattr(os, "fork"), "Forking not available")
     def test_logging_with_run_task(self):
@@ -818,9 +880,12 @@ def test_context_with_run():
     task_args = ["tasks", "run", dag_id, task_id, "--local", execution_date_str]
     parser = cli_parser.get_parser()
 
-    DagBag().get_dag(dag_id).create_dagrun(
+    dag = DagBag().get_dag(dag_id)
+    data_interval = dag.timetable.infer_manual_data_interval(run_after=execution_date)
+    dag.create_dagrun(
         run_id=run_id,
         execution_date=execution_date,
+        data_interval=data_interval,
         start_date=timezone.utcnow(),
         state=State.RUNNING,
         run_type=DagRunType.MANUAL,
@@ -834,3 +899,68 @@ def test_context_with_run():
         text == "_AIRFLOW_PARSING_CONTEXT_DAG_ID=test_parsing_context\n"
         "_AIRFLOW_PARSING_CONTEXT_TASK_ID=task1\n"
     )
+
+
+class TestLoggerMutationHelper:
+    @pytest.mark.parametrize("target_name", ["test_apply_target", None])
+    def test_apply(self, target_name):
+        """
+        Handlers, level and propagate should be applied on target.
+        """
+        src = logging.getLogger(f"test_apply_source_{target_name}")
+        src.propagate = False
+        src.addHandler(sentinel.handler)
+        src.setLevel(-1)
+        obj = LoggerMutationHelper(src)
+        tgt = logging.getLogger("test_apply_target")
+        obj.apply(tgt)
+        assert tgt.handlers == [sentinel.handler]
+        assert tgt.propagate is False if target_name else True  # root propagate unchanged
+        assert tgt.level == -1
+
+    def test_apply_no_replace(self):
+        """
+        Handlers, level and propagate should be applied on target.
+        """
+        src = logging.getLogger("test_apply_source_no_repl")
+        tgt = logging.getLogger("test_apply_target_no_repl")
+        h1 = logging.Handler()
+        h1.name = "h1"
+        h2 = logging.Handler()
+        h2.name = "h2"
+        h3 = logging.Handler()
+        h3.name = "h3"
+        src.handlers[:] = [h1, h2]
+        tgt.handlers[:] = [h2, h3]
+        LoggerMutationHelper(src).apply(tgt, replace=False)
+        assert tgt.handlers == [h2, h3, h1]
+
+    def test_move(self):
+        """Move should apply plus remove source handler, set propagate to True"""
+        src = logging.getLogger("test_move_source")
+        src.propagate = False
+        src.addHandler(sentinel.handler)
+        src.setLevel(-1)
+        obj = LoggerMutationHelper(src)
+        tgt = logging.getLogger("test_apply_target")
+        obj.move(tgt)
+        assert tgt.handlers == [sentinel.handler]
+        assert tgt.propagate is False
+        assert tgt.level == -1
+        assert src.propagate is True and obj.propagate is False
+        assert src.level == obj.level
+        assert src.handlers == [] and obj.handlers == tgt.handlers
+
+    def test_reset(self):
+        src = logging.getLogger("test_move_reset")
+        src.propagate = True
+        src.addHandler(sentinel.h1)
+        src.setLevel(-1)
+        obj = LoggerMutationHelper(src)
+        src.propagate = False
+        src.addHandler(sentinel.h2)
+        src.setLevel(-2)
+        obj.reset()
+        assert src.propagate is True
+        assert src.handlers == [sentinel.h1]
+        assert src.level == -1

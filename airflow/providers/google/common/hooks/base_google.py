@@ -46,7 +46,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, build_http, set_user_agent
 
 from airflow import version
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException, AirflowProviderDeprecationWarning
 from airflow.hooks.base import BaseHook
 from airflow.providers.google.cloud.utils.credentials_provider import (
     _get_scopes,
@@ -167,7 +167,10 @@ class GoogleBaseHook(BaseHook):
     :param gcp_conn_id: The connection ID to use when fetching connection info.
     :param delegate_to: The account to impersonate using domain-wide delegation of authority,
         if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
+        domain-wide delegation enabled. The usage of this parameter should be limited only to Google Workspace
+        (gsuite) and marketing platform operators and hooks. It is deprecated for usage by Google Cloud
+        and Firebase operators and hooks, as well as transfer operators in other providers that involve
+        Google cloud.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -195,6 +198,9 @@ class GoogleBaseHook(BaseHook):
             "project": StringField(lazy_gettext("Project Id"), widget=BS3TextFieldWidget()),
             "key_path": StringField(lazy_gettext("Keyfile Path"), widget=BS3TextFieldWidget()),
             "keyfile_dict": PasswordField(lazy_gettext("Keyfile JSON"), widget=BS3PasswordFieldWidget()),
+            "credential_config_file": StringField(
+                lazy_gettext("Credential Configuration File"), widget=BS3TextFieldWidget()
+            ),
             "scope": StringField(lazy_gettext("Scopes (comma separated)"), widget=BS3TextFieldWidget()),
             "key_secret_name": StringField(
                 lazy_gettext("Keyfile Secret Name (in GCP Secret Manager)"), widget=BS3TextFieldWidget()
@@ -239,20 +245,27 @@ class GoogleBaseHook(BaseHook):
 
         key_path: str | None = self._get_field("key_path", None)
         try:
-            keyfile_dict: str | None = self._get_field("keyfile_dict", None)
+            keyfile_dict: str | dict[str, str] | None = self._get_field("keyfile_dict", None)
             keyfile_dict_json: dict[str, str] | None = None
             if keyfile_dict:
-                keyfile_dict_json = json.loads(keyfile_dict)
+                if isinstance(keyfile_dict, dict):
+                    keyfile_dict_json = keyfile_dict
+                else:
+                    keyfile_dict_json = json.loads(keyfile_dict)
         except json.decoder.JSONDecodeError:
             raise AirflowException("Invalid key JSON.")
+
         key_secret_name: str | None = self._get_field("key_secret_name", None)
         key_secret_project_id: str | None = self._get_field("key_secret_project_id", None)
+
+        credential_config_file: str | None = self._get_field("credential_config_file", None)
 
         target_principal, delegates = _get_target_principal_and_delegates(self.impersonation_chain)
 
         credentials, project_id = get_credentials_and_project_id(
             key_path=key_path,
             keyfile_dict=keyfile_dict_json,
+            credential_config_file=credential_config_file,
             key_secret_name=key_secret_name,
             key_secret_project_id=key_secret_project_id,
             scopes=self.scopes,
@@ -376,7 +389,7 @@ class GoogleBaseHook(BaseHook):
         """
         warnings.warn(
             "This method is deprecated, please use `airflow.providers.google.common.consts.CLIENT_INFO`.",
-            DeprecationWarning,
+            AirflowProviderDeprecationWarning,
             stacklevel=2,
         )
         return CLIENT_INFO
@@ -491,7 +504,7 @@ class GoogleBaseHook(BaseHook):
         file in ``GOOGLE_APPLICATION_CREDENTIALS`` environment variable.
         """
         key_path: str | None = self._get_field("key_path", None)
-        keyfile_dict: str | None = self._get_field("keyfile_dict", None)
+        keyfile_dict: str | dict[str, str] | None = self._get_field("keyfile_dict", None)
         if key_path and keyfile_dict:
             raise AirflowException(
                 "The `keyfile_dict` and `key_path` fields are mutually exclusive. "
@@ -504,6 +517,8 @@ class GoogleBaseHook(BaseHook):
                 yield key_path
         elif keyfile_dict:
             with tempfile.NamedTemporaryFile(mode="w+t") as conf_file:
+                if isinstance(keyfile_dict, dict):
+                    keyfile_dict = json.dumps(keyfile_dict)
                 conf_file.write(keyfile_dict)
                 conf_file.flush()
                 with patch_environ({CREDENTIALS: conf_file.name}):

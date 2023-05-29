@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import shlex
 import warnings
 from contextlib import redirect_stdout
 from unittest import mock
@@ -353,7 +354,7 @@ class TestCliAddConnections:
     @pytest.mark.parametrize(
         "cmd, expected_output, expected_conn",
         [
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -371,8 +372,9 @@ class TestCliAddConnections:
                     "port": 5432,
                     "schema": "airflow",
                 },
+                id="json-connection",
             ),
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -391,8 +393,9 @@ class TestCliAddConnections:
                     "port": 5432,
                     "schema": "airflow",
                 },
+                id="uri-connection-with-description",
             ),
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -411,8 +414,9 @@ class TestCliAddConnections:
                     "port": 5432,
                     "schema": "airflow",
                 },
+                id="uri-connection-with-description-2",
             ),
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -432,8 +436,9 @@ class TestCliAddConnections:
                     "port": 5432,
                     "schema": "airflow",
                 },
+                id="uri-connection-with-extra",
             ),
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -455,8 +460,9 @@ class TestCliAddConnections:
                     "port": 5432,
                     "schema": "airflow",
                 },
+                id="uri-connection-with-extra-and-description",
             ),
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -480,8 +486,9 @@ class TestCliAddConnections:
                     "port": 9083,
                     "schema": "airflow",
                 },
+                id="individual-parts",
             ),
-            (
+            pytest.param(
                 [
                     "connections",
                     "add",
@@ -504,9 +511,41 @@ class TestCliAddConnections:
                     "port": None,
                     "schema": None,
                 },
+                id="empty-uri-with-conn-type-and-extra",
+            ),
+            pytest.param(
+                ["connections", "add", "new6", "--conn-uri", "aws://?region_name=foo-bar-1"],
+                "Successfully added `conn_id`=new6 : aws://?region_name=foo-bar-1",
+                {
+                    "conn_type": "aws",
+                    "description": None,
+                    "host": "",
+                    "is_encrypted": False,
+                    "is_extra_encrypted": True,
+                    "login": None,
+                    "port": None,
+                    "schema": "",
+                },
+                id="uri-without-authority-and-host-blocks",
+            ),
+            pytest.param(
+                ["connections", "add", "new7", "--conn-uri", "aws://@/?region_name=foo-bar-1"],
+                "Successfully added `conn_id`=new7 : aws://@/?region_name=foo-bar-1",
+                {
+                    "conn_type": "aws",
+                    "description": None,
+                    "host": "",
+                    "is_encrypted": False,
+                    "is_extra_encrypted": True,
+                    "login": "",
+                    "port": None,
+                    "schema": "",
+                },
+                id="uri-with-@-instead-authority-and-host-blocks",
             ),
         ],
     )
+    @pytest.mark.execution_timeout(120)
     def test_cli_connection_add(self, cmd, expected_output, expected_conn):
         with redirect_stdout(io.StringIO()) as stdout:
             connection_command.connections_add(self.parser.parse_args(cmd))
@@ -572,11 +611,20 @@ class TestCliAddConnections:
                 )
             )
 
-    def test_cli_connections_add_invalid_uri(self):
+    @pytest.mark.parametrize(
+        "invalid_uri",
+        [
+            pytest.param("nonsense_uri", id="word"),
+            pytest.param("://password:type@host:42/schema", id="missing-conn-type"),
+        ],
+    )
+    def test_cli_connections_add_invalid_uri(self, invalid_uri):
         # Attempt to add with invalid uri
-        with pytest.raises(SystemExit, match=r"The URI provided to --conn-uri is invalid: nonsense_uri"):
+        with pytest.raises(SystemExit, match=r"The URI provided to --conn-uri is invalid: .*"):
             connection_command.connections_add(
-                self.parser.parse_args(["connections", "add", "new1", f"--conn-uri={'nonsense_uri'}"])
+                self.parser.parse_args(
+                    ["connections", "add", "new1", f"--conn-uri={shlex.quote(invalid_uri)}"]
+                )
             )
 
     def test_cli_connections_add_invalid_type(self):
@@ -586,6 +634,16 @@ class TestCliAddConnections:
                     ["connections", "add", "fsconn", "--conn-host=/tmp", "--conn-type=File"]
                 )
             )
+
+    def test_cli_connections_add_invalid_conn_id(self):
+        with pytest.raises(SystemExit) as e:
+            connection_command.connections_add(
+                self.parser.parse_args(["connections", "add", "Test$", f"--conn-uri={TEST_URL}"])
+            )
+        assert (
+            e.value.args[0] == "Could not create connection. The key 'Test$' has to be made of "
+            "alphanumeric characters, dashes, dots and underscores exclusively"
+        )
 
 
 class TestCliDeleteConnections:
@@ -872,3 +930,37 @@ class TestCliImportConnections:
 
         # The existing connection should have been overwritten
         assert current_conns_as_dicts["new3"] == expected_connections["new3"]
+
+
+class TestCliTestConnections:
+    parser = cli_parser.get_parser()
+
+    def setup_class(self):
+        clear_db_connections()
+
+    @mock.patch("airflow.providers.http.hooks.http.HttpHook.test_connection")
+    def test_cli_connections_test_success(self, mock_test_conn):
+        """Check that successful connection test result is displayed properly."""
+        conn_id = "http_default"
+        mock_test_conn.return_value = True, None
+        with redirect_stdout(io.StringIO()) as stdout:
+            connection_command.connections_test(self.parser.parse_args(["connections", "test", conn_id]))
+
+            assert "Connection success!" in stdout.getvalue()
+
+    @mock.patch("airflow.providers.http.hooks.http.HttpHook.test_connection")
+    def test_cli_connections_test_fail(self, mock_test_conn):
+        """Check that failed connection test result is displayed properly."""
+        conn_id = "http_default"
+        mock_test_conn.return_value = False, "Failed."
+        with redirect_stdout(io.StringIO()) as stdout:
+            connection_command.connections_test(self.parser.parse_args(["connections", "test", conn_id]))
+
+            assert "Connection failed!\nFailed.\n\n" in stdout.getvalue()
+
+    def test_cli_connections_test_missing_conn(self):
+        """Check a connection test on a non-existent connection raises a "Connection not found" message."""
+        with redirect_stdout(io.StringIO()) as stdout, pytest.raises(SystemExit):
+            connection_command.connections_test(self.parser.parse_args(["connections", "test", "missing"]))
+
+            assert "Connection not found.\n\n" in stdout.getvalue()

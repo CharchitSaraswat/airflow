@@ -24,17 +24,17 @@ from typing import TYPE_CHECKING, Any, Sequence, Tuple
 from google.api_core.exceptions import AlreadyExists
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
 from google.api_core.retry import Retry
-from google.cloud.vision_v1.types import (
+from google.cloud.vision_v1 import (
     AnnotateImageRequest,
-    FieldMask,
     Image,
     Product,
     ProductSet,
     ReferenceImage,
 )
+from google.protobuf.field_mask_pb2 import FieldMask  # type: ignore
 
-from airflow.models import BaseOperator
 from airflow.providers.google.cloud.hooks.vision import CloudVisionHook
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 
 if TYPE_CHECKING:
     from airflow.utils.context import Context
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 MetaData = Sequence[Tuple[str, str]]
 
 
-class CloudVisionCreateProductSetOperator(BaseOperator):
+class CloudVisionCreateProductSetOperator(GoogleCloudBaseOperator):
     """
     Creates a new ProductSet resource.
 
@@ -136,7 +136,7 @@ class CloudVisionCreateProductSetOperator(BaseOperator):
             return self.product_set_id
 
 
-class CloudVisionGetProductSetOperator(BaseOperator):
+class CloudVisionGetProductSetOperator(GoogleCloudBaseOperator):
     """
     Gets information associated with a ProductSet.
 
@@ -214,7 +214,7 @@ class CloudVisionGetProductSetOperator(BaseOperator):
         )
 
 
-class CloudVisionUpdateProductSetOperator(BaseOperator):
+class CloudVisionUpdateProductSetOperator(GoogleCloudBaseOperator):
     """
     Makes changes to a `ProductSet` resource. Only display_name can be updated currently.
 
@@ -278,7 +278,7 @@ class CloudVisionUpdateProductSetOperator(BaseOperator):
         location: str | None = None,
         product_set_id: str | None = None,
         project_id: str | None = None,
-        update_mask: dict | FieldMask = None,
+        update_mask: dict | FieldMask | None = None,
         retry: Retry | _MethodDefault = DEFAULT,
         timeout: float | None = None,
         metadata: MetaData = (),
@@ -303,6 +303,9 @@ class CloudVisionUpdateProductSetOperator(BaseOperator):
             gcp_conn_id=self.gcp_conn_id,
             impersonation_chain=self.impersonation_chain,
         )
+
+        if isinstance(self.product_set, dict):
+            self.product_set = ProductSet(self.product_set)
         return hook.update_product_set(
             location=self.location,
             product_set_id=self.product_set_id,
@@ -315,7 +318,7 @@ class CloudVisionUpdateProductSetOperator(BaseOperator):
         )
 
 
-class CloudVisionDeleteProductSetOperator(BaseOperator):
+class CloudVisionDeleteProductSetOperator(GoogleCloudBaseOperator):
     """
     Permanently deletes a `ProductSet`. `Products` and `ReferenceImages` in the
     `ProductSet` are not deleted. The actual image files are not deleted from Google
@@ -395,7 +398,7 @@ class CloudVisionDeleteProductSetOperator(BaseOperator):
         )
 
 
-class CloudVisionCreateProductOperator(BaseOperator):
+class CloudVisionCreateProductOperator(GoogleCloudBaseOperator):
     """
     Creates and returns a new product resource.
 
@@ -493,7 +496,7 @@ class CloudVisionCreateProductOperator(BaseOperator):
             return self.product_id
 
 
-class CloudVisionGetProductOperator(BaseOperator):
+class CloudVisionGetProductOperator(GoogleCloudBaseOperator):
     """
     Gets information associated with a `Product`.
 
@@ -575,7 +578,7 @@ class CloudVisionGetProductOperator(BaseOperator):
         )
 
 
-class CloudVisionUpdateProductOperator(BaseOperator):
+class CloudVisionUpdateProductOperator(GoogleCloudBaseOperator):
     """
     Makes changes to a Product resource. Only the display_name, description, and labels fields can be
     updated right now.
@@ -650,7 +653,7 @@ class CloudVisionUpdateProductOperator(BaseOperator):
         location: str | None = None,
         product_id: str | None = None,
         project_id: str | None = None,
-        update_mask: dict | FieldMask = None,
+        update_mask: dict | FieldMask | None = None,
         retry: Retry | _MethodDefault = DEFAULT,
         timeout: float | None = None,
         metadata: MetaData = (),
@@ -675,19 +678,20 @@ class CloudVisionUpdateProductOperator(BaseOperator):
             gcp_conn_id=self.gcp_conn_id,
             impersonation_chain=self.impersonation_chain,
         )
+
         return hook.update_product(
             product=self.product,
             location=self.location,
             product_id=self.product_id,
             project_id=self.project_id,
-            update_mask=self.update_mask,
+            update_mask=self.update_mask,  # type: ignore
             retry=self.retry,
             timeout=self.timeout,
             metadata=self.metadata,
         )
 
 
-class CloudVisionDeleteProductOperator(BaseOperator):
+class CloudVisionDeleteProductOperator(GoogleCloudBaseOperator):
     """
     Permanently deletes a product and its reference images.
 
@@ -772,7 +776,7 @@ class CloudVisionDeleteProductOperator(BaseOperator):
         )
 
 
-class CloudVisionImageAnnotateOperator(BaseOperator):
+class CloudVisionImageAnnotateOperator(GoogleCloudBaseOperator):
     """
     Run image detection and annotation for an image or a batch of images.
 
@@ -840,7 +844,7 @@ class CloudVisionImageAnnotateOperator(BaseOperator):
         return response
 
 
-class CloudVisionCreateReferenceImageOperator(BaseOperator):
+class CloudVisionCreateReferenceImageOperator(GoogleCloudBaseOperator):
     """
     Creates and returns a new ReferenceImage ID resource.
 
@@ -923,6 +927,9 @@ class CloudVisionCreateReferenceImageOperator(BaseOperator):
                 gcp_conn_id=self.gcp_conn_id,
                 impersonation_chain=self.impersonation_chain,
             )
+
+            if isinstance(self.reference_image, dict):
+                self.reference_image = ReferenceImage(self.reference_image)
             return hook.create_reference_image(
                 location=self.location,
                 product_id=self.product_id,
@@ -941,7 +948,7 @@ class CloudVisionCreateReferenceImageOperator(BaseOperator):
             return self.reference_image_id
 
 
-class CloudVisionDeleteReferenceImageOperator(BaseOperator):
+class CloudVisionDeleteReferenceImageOperator(GoogleCloudBaseOperator):
     """
     Deletes a ReferenceImage ID resource.
 
@@ -1027,7 +1034,7 @@ class CloudVisionDeleteReferenceImageOperator(BaseOperator):
         )
 
 
-class CloudVisionAddProductToProductSetOperator(BaseOperator):
+class CloudVisionAddProductToProductSetOperator(GoogleCloudBaseOperator):
     """
     Adds a Product to the specified ProductSet. If the Product is already present, no change is made.
 
@@ -1116,7 +1123,7 @@ class CloudVisionAddProductToProductSetOperator(BaseOperator):
         )
 
 
-class CloudVisionRemoveProductFromProductSetOperator(BaseOperator):
+class CloudVisionRemoveProductFromProductSetOperator(GoogleCloudBaseOperator):
     """
     Removes a Product from the specified ProductSet.
 
@@ -1199,7 +1206,7 @@ class CloudVisionRemoveProductFromProductSetOperator(BaseOperator):
         )
 
 
-class CloudVisionDetectTextOperator(BaseOperator):
+class CloudVisionDetectTextOperator(GoogleCloudBaseOperator):
     """
     Detects Text in the image
 
@@ -1281,7 +1288,7 @@ class CloudVisionDetectTextOperator(BaseOperator):
         )
 
 
-class CloudVisionTextDetectOperator(BaseOperator):
+class CloudVisionTextDetectOperator(GoogleCloudBaseOperator):
     """
     Detects Document Text in the image
 
@@ -1362,7 +1369,7 @@ class CloudVisionTextDetectOperator(BaseOperator):
         )
 
 
-class CloudVisionDetectImageLabelsOperator(BaseOperator):
+class CloudVisionDetectImageLabelsOperator(GoogleCloudBaseOperator):
     """
     Detects Document Text in the image
 
@@ -1433,7 +1440,7 @@ class CloudVisionDetectImageLabelsOperator(BaseOperator):
         )
 
 
-class CloudVisionDetectImageSafeSearchOperator(BaseOperator):
+class CloudVisionDetectImageSafeSearchOperator(GoogleCloudBaseOperator):
     """
     Detects Document Text in the image
 

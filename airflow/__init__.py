@@ -26,6 +26,8 @@ isort:skip_file
 """
 from __future__ import annotations
 
+__version__ = "2.7.0.dev0"
+
 # flake8: noqa: F401
 
 import os
@@ -40,6 +42,14 @@ if os.environ.get("_AIRFLOW_PATCH_GEVENT"):
 
     patch_all()
 
+# The configuration module initializes and validates the conf object as a side effect the first
+# time it is imported. If it is not imported before importing the settings module, the conf
+# object will then be initted/validated as a side effect of it being imported in settings,
+# however this can cause issues since those modules are very tightly coupled and can
+# very easily cause import cycles in the conf init/validate code (since downstream code from
+# those functions likely import settings).
+# configuration is therefore initted early here, simply by importing it.
+from airflow import configuration
 from airflow import settings
 
 __all__ = ["__version__", "login", "DAG", "PY36", "PY37", "PY38", "PY39", "PY310", "XComArg"]
@@ -62,6 +72,7 @@ PY37 = sys.version_info >= (3, 7)
 PY38 = sys.version_info >= (3, 8)
 PY39 = sys.version_info >= (3, 9)
 PY310 = sys.version_info >= (3, 10)
+PY311 = sys.version_info >= (3, 11)
 
 # Things to lazy import in form {local_name: ('target_module', 'target_name')}
 __lazy_imports: dict[str, tuple[str, str]] = {
@@ -70,7 +81,6 @@ __lazy_imports: dict[str, tuple[str, str]] = {
     "XComArg": (".models.xcom_arg", "XComArg"),
     "AirflowException": (".exceptions", "AirflowException"),
     "version": (".version", ""),
-    "__version__": (".version", "version"),
 }
 
 
@@ -116,3 +126,4 @@ if STATICA_HACK:  # pragma: no cover
     from airflow.models.dag import DAG
     from airflow.models.xcom_arg import XComArg
     from airflow.exceptions import AirflowException
+    from airflow.models.dataset import Dataset

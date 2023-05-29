@@ -24,12 +24,45 @@
 Changelog
 ---------
 
+7.3.0
+.....
+
+.. note::
+  This release of provider is only available for Airflow 2.4+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
+
+Misc
+~~~~
+
+* ``Bump minimum Airflow version in providers (#30917)``
+* ``Add Documentation for notification feature extension (#29191)``
+* ``Standardize Slack Notifier (#31244)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Use 'AirflowProviderDeprecationWarning' in providers (#30975)``
+   * ``Prepare docs for Feb 2023 wave of Providers (#29379)``
+   * ``Add full automation for min Airflow version for providers (#30994)``
+   * ``Add mechanism to suspend providers (#30422)``
+   * ``Use '__version__' in providers not 'version' (#31393)``
+   * ``Fixing circular import error in providers caused by airflow version check (#31379)``
+   * ``Prepare docs for May 2023 wave of Providers (#31252)``
+
+7.2.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add general-purpose "notifier" concept to DAGs (#28569)``
+
 7.1.1
 .....
 
 Misc
 ~~~~
-   * ``[misc] Replace XOR '^' conditions by 'exactly_one' helper in providers (#27858)``
+
+* ``[misc] Replace XOR '^' conditions by 'exactly_one' helper in providers (#27858)``
 
 .. Below changes are excluded from the changelog. Move them to
    appropriate section above if needed. Do not delete the lines(!):
@@ -41,7 +74,6 @@ Features
 ~~~~~~~~
 
 * ``Implements SqlToSlackApiFileOperator (#26374)``
-* ``Added SlackNotifier (#28569)``
 
 Bug Fixes
 ~~~~~~~~~
@@ -55,8 +87,9 @@ Bug Fixes
 7.0.0
 .....
 
-This release of provider is only available for Airflow 2.3+ as explained in the
-`Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/README.md#support-for-providers>`_.
+.. note::
+  This release of provider is only available for Airflow 2.3+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 Breaking changes
 ~~~~~~~~~~~~~~~~
@@ -131,8 +164,9 @@ Features
 Breaking changes
 ~~~~~~~~~~~~~~~~
 
-* This release of provider is only available for Airflow 2.2+ as explained in the Apache Airflow
-  providers support policy https://github.com/apache/airflow/blob/main/README.md#support-for-providers
+.. note::
+  This release of provider is only available for Airflow 2.2+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 .. Below changes are excluded from the changelog. Move them to
    appropriate section above if needed. Do not delete the lines(!):

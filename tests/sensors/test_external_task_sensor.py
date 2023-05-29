@@ -17,7 +17,6 @@
 # under the License.
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import tempfile
@@ -39,6 +38,7 @@ from airflow.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskMarker, ExternalTaskSensor, ExternalTaskSensorLink
 from airflow.sensors.time_sensor import TimeSensor
 from airflow.serialization.serialized_objects import SerializedBaseOperator
+from airflow.utils.hashlib_wrapper import md5
 from airflow.utils.session import create_session, provide_session
 from airflow.utils.state import DagRunState, State, TaskInstanceState
 from airflow.utils.task_group import TaskGroup
@@ -66,7 +66,7 @@ def dag_zip_maker():
     class DagZipMaker:
         def __call__(self, *dag_files):
             self.__dag_files = [os.sep.join([TEST_DAGS_FOLDER.__str__(), dag_file]) for dag_file in dag_files]
-            dag_files_hash = hashlib.md5("".join(self.__dag_files).encode()).hexdigest()
+            dag_files_hash = md5("".join(self.__dag_files).encode()).hexdigest()
             self.__tmp_dir = os.sep.join([tempfile.tempdir, dag_files_hash])
 
             self.__zip_file_name = os.sep.join([self.__tmp_dir, f"{dag_files_hash}.zip"])
@@ -112,6 +112,35 @@ class TestExternalTaskSensor:
             ti.run(ignore_ti_state=True, mark_success=True)
             ti.set_state(target_states[idx])
 
+    def add_dummy_task_group_with_dynamic_tasks(self, target_state=State.SUCCESS):
+        map_indexes = range(5)
+        with self.dag as dag:
+            with TaskGroup(group_id=TEST_TASK_GROUP_ID) as task_group:
+
+                @task_deco
+                def dummy_task():
+                    pass
+
+                @task_deco
+                def dummy_mapped_task(x: int):
+                    return x
+
+                dummy_task()
+                dummy_mapped_task.expand(x=[i for i in map_indexes])
+
+        SerializedDagModel.write_dag(dag)
+
+        for task in task_group:
+            if task.task_id == "dummy_mapped_task":
+                for map_index in map_indexes:
+                    ti = TaskInstance(task=task, execution_date=DEFAULT_DATE, map_index=map_index)
+                    ti.run(ignore_ti_state=True, mark_success=True)
+                    ti.set_state(target_state)
+            else:
+                ti = TaskInstance(task=task, execution_date=DEFAULT_DATE)
+                ti.run(ignore_ti_state=True, mark_success=True)
+                ti.set_state(target_state)
+
     def test_external_task_sensor(self):
         self.add_time_sensor()
         op = ExternalTaskSensor(
@@ -144,18 +173,49 @@ class TestExternalTaskSensor:
         )
         op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
+    def test_raise_with_external_task_sensor_task_id_and_task_ids(self):
+        with pytest.raises(ValueError) as ctx:
+            ExternalTaskSensor(
+                task_id="test_external_task_sensor_task_id_with_task_ids_failed_status",
+                external_dag_id=TEST_DAG_ID,
+                external_task_id=TEST_TASK_ID,
+                external_task_ids=TEST_TASK_ID,
+                dag=self.dag,
+            )
+        assert (
+            str(ctx.value) == "Only one of `external_task_id` or `external_task_ids` may "
+            "be provided to ExternalTaskSensor; "
+            "use external_task_id or external_task_ids or external_task_group_id."
+        )
+
     def test_raise_with_external_task_sensor_task_group_and_task_id(self):
         with pytest.raises(ValueError) as ctx:
             ExternalTaskSensor(
                 task_id="test_external_task_sensor_task_group_with_task_id_failed_status",
+                external_dag_id=TEST_DAG_ID,
+                external_task_id=TEST_TASK_ID,
+                external_task_group_id=TEST_TASK_GROUP_ID,
+                dag=self.dag,
+            )
+        assert (
+            str(ctx.value) == "Only one of `external_task_group_id` or `external_task_ids` may "
+            "be provided to ExternalTaskSensor; "
+            "use external_task_id or external_task_ids or external_task_group_id."
+        )
+
+    def test_raise_with_external_task_sensor_task_group_and_task_ids(self):
+        with pytest.raises(ValueError) as ctx:
+            ExternalTaskSensor(
+                task_id="test_external_task_sensor_task_group_with_task_ids_failed_status",
                 external_dag_id=TEST_DAG_ID,
                 external_task_ids=TEST_TASK_ID,
                 external_task_group_id=TEST_TASK_GROUP_ID,
                 dag=self.dag,
             )
         assert (
-            str(ctx.value) == "Values for `external_task_group_id` and `external_task_id` or "
-            "`external_task_ids` can't be set at the same time"
+            str(ctx.value) == "Only one of `external_task_group_id` or `external_task_ids` may "
+            "be provided to ExternalTaskSensor; "
+            "use external_task_id or external_task_ids or external_task_group_id."
         )
 
     # by default i.e. check_existence=False, if task_group doesn't exist, the sensor will run till timeout,
@@ -276,6 +336,26 @@ class TestExternalTaskSensor:
         assert len(task_instances) == 1, "Unexpected number of task instances"
         assert task_instances[0].state == State.SKIPPED, "Unexpected external task state"
 
+    def test_external_task_sensor_skipped_states_as_skipped(self, session):
+        self.add_time_sensor()
+        op = ExternalTaskSensor(
+            task_id="test_external_task_sensor_check",
+            external_dag_id=TEST_DAG_ID,
+            external_task_id=TEST_TASK_ID,
+            allowed_states=[State.FAILED],
+            skipped_states=[State.SUCCESS],
+            dag=self.dag,
+        )
+
+        # when
+        op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+        # then
+        TI = TaskInstance
+        task_instances: list[TI] = session.query(TI).filter(TI.task_id == op.task_id).all()
+        assert len(task_instances) == 1, "Unexpected number of task instances"
+        assert task_instances[0].state == State.SKIPPED, "Unexpected external task state"
+
     def test_external_task_sensor_external_task_id_param(self, caplog):
         """Test external_task_ids is set properly when external_task_id is passed as a template"""
         self.add_time_sensor()
@@ -350,6 +430,19 @@ class TestExternalTaskSensor:
             dag=self.dag,
         )
         op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+    def test_external_dag_sensor_log(self, caplog):
+        other_dag = DAG("other_dag", default_args=self.args, end_date=DEFAULT_DATE, schedule="@once")
+        other_dag.create_dagrun(
+            run_id="test", start_date=DEFAULT_DATE, execution_date=DEFAULT_DATE, state=State.SUCCESS
+        )
+        op = ExternalTaskSensor(
+            task_id="test_external_dag_sensor_check",
+            external_dag_id="other_dag",
+            dag=self.dag,
+        )
+        op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+        assert (f"Poking for DAG 'other_dag' on {DEFAULT_DATE.isoformat()} ... ") in caplog.messages
 
     def test_external_dag_sensor_soft_fail_as_skipped(self):
         other_dag = DAG("other_dag", default_args=self.args, end_date=DEFAULT_DATE, schedule="@once")
@@ -685,6 +778,34 @@ exit 0
         )
 
         with pytest.raises(AirflowException):
+            op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+    def test_external_task_group_with_mapped_tasks_sensor_success(self):
+        self.add_time_sensor()
+        self.add_dummy_task_group_with_dynamic_tasks()
+        op = ExternalTaskSensor(
+            task_id="test_external_task_sensor_check",
+            external_dag_id=TEST_DAG_ID,
+            external_task_group_id=TEST_TASK_GROUP_ID,
+            failed_states=[State.FAILED],
+            dag=self.dag,
+        )
+        op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+    def test_external_task_group_with_mapped_tasks_failed_states(self):
+        self.add_time_sensor()
+        self.add_dummy_task_group_with_dynamic_tasks(State.FAILED)
+        op = ExternalTaskSensor(
+            task_id="test_external_task_sensor_check",
+            external_dag_id=TEST_DAG_ID,
+            external_task_group_id=TEST_TASK_GROUP_ID,
+            failed_states=[State.FAILED],
+            dag=self.dag,
+        )
+        with pytest.raises(
+            AirflowException,
+            match=f"The external task_group '{TEST_TASK_GROUP_ID}' in DAG '{TEST_DAG_ID}' failed.",
+        ):
             op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 

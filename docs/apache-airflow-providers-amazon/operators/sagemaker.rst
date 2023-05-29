@@ -29,7 +29,7 @@ Airflow provides operators to create and interact with SageMaker Jobs and Pipeli
 Prerequisite Tasks
 ------------------
 
-.. include:: _partials/prerequisite_tasks.rst
+.. include:: ../_partials/prerequisite_tasks.rst
 
 Operators
 ---------
@@ -207,6 +207,20 @@ The output is placed in an S3 bucket, and automatically deployed if configured f
     :dedent: 4
     :start-after: [START howto_operator_sagemaker_auto_ml]
     :end-before: [END howto_operator_sagemaker_auto_ml]
+
+.. _howto/operator:SageMakerCreateExperimentOperator:
+
+Create an Experiment for later use
+==================================
+
+To create a SageMaker experiment, you can use :class:`~airflow.providers.amazon.aws.operators.sagemaker.SageMakerCreateExperimentOperator`.
+This creates an experiment so that it's ready to be associated with processing, training and transform jobs.
+
+.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_sagemaker.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_sagemaker_experiment]
+    :end-before: [END howto_operator_sagemaker_experiment]
 
 Sensors
 -------

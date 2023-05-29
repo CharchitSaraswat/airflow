@@ -17,17 +17,18 @@
 """Useful tools for running commands."""
 from __future__ import annotations
 
+import atexit
 import contextlib
 import os
 import re
 import shlex
+import signal
 import stat
 import subprocess
 import sys
 from distutils.version import StrictVersion
 from functools import lru_cache
 from pathlib import Path
-from threading import Thread
 from typing import Mapping, Union
 
 from rich.markup import escape
@@ -36,7 +37,12 @@ from airflow_breeze.branch_defaults import AIRFLOW_BRANCH
 from airflow_breeze.global_constants import APACHE_AIRFLOW_GITHUB_REPOSITORY
 from airflow_breeze.utils.ci_group import ci_group
 from airflow_breeze.utils.console import Output, get_console
-from airflow_breeze.utils.path_utils import AIRFLOW_SOURCES_ROOT, WWW_ASSET_COMPILE_LOCK, WWW_ASSET_OUT_FILE
+from airflow_breeze.utils.path_utils import (
+    AIRFLOW_SOURCES_ROOT,
+    WWW_ASSET_COMPILE_LOCK,
+    WWW_ASSET_OUT_DEV_MODE_FILE,
+    WWW_ASSET_OUT_FILE,
+)
 from airflow_breeze.utils.shared_options import get_dry_run, get_verbose
 
 RunCommandResult = Union[subprocess.CompletedProcess, subprocess.CalledProcessError]
@@ -51,7 +57,7 @@ def run_command(
     check: bool = True,
     no_output_dump_on_exception: bool = False,
     env: Mapping[str, str] | None = None,
-    cwd: Path | None = None,
+    cwd: Path | str | None = None,
     input: str | None = None,
     output: Output | None = None,
     output_outside_the_group: bool = False,
@@ -373,7 +379,7 @@ def check_if_image_exists(image: str) -> bool:
 
 def get_ci_image_for_pre_commits() -> str:
     github_repository = os.environ.get("GITHUB_REPOSITORY", APACHE_AIRFLOW_GITHUB_REPOSITORY)
-    python_version = "3.7"
+    python_version = "3.8"
     airflow_image = f"ghcr.io/{github_repository}/{AIRFLOW_BRANCH}/ci/python{python_version}"
     skip_image_pre_commits = os.environ.get("SKIP_IMAGE_PRE_COMMITS", "false")
     if skip_image_pre_commits[0].lower() == "t":
@@ -413,16 +419,22 @@ def _run_compile_internally(command_to_execute: list[str], dev: bool) -> RunComm
             pass
         try:
             with SoftFileLock(WWW_ASSET_COMPILE_LOCK, timeout=5):
-                with open(WWW_ASSET_OUT_FILE, "w") as f:
-                    return run_command(
+                with open(WWW_ASSET_OUT_FILE, "w") as output_file:
+                    result = run_command(
                         command_to_execute,
                         check=False,
                         no_output_dump_on_exception=True,
                         text=True,
                         env=env,
                         stderr=subprocess.STDOUT,
-                        stdout=f,
+                        stdout=output_file,
                     )
+                if result.returncode == 0:
+                    try:
+                        WWW_ASSET_OUT_FILE.unlink()
+                    except FileNotFoundError:
+                        pass
+                return result
         except Timeout:
             get_console().print("[error]Another asset compilation is running. Exiting[/]\n")
             get_console().print("[warning]If you are sure there is no other compilation,[/]")
@@ -454,9 +466,20 @@ def run_compile_www_assets(
         "--all-files",
         "--verbose",
     ]
-    get_console().print(f"[info] The output of the asset compilation is stored in: [/]{WWW_ASSET_OUT_FILE}\n")
+    get_console().print(
+        "[info]The output of the asset compilation is stored in: [/]"
+        f"{WWW_ASSET_OUT_DEV_MODE_FILE if dev else WWW_ASSET_OUT_FILE}\n"
+    )
     if run_in_background:
-        thread = Thread(daemon=True, target=_run_compile_internally, args=(command_to_execute, dev))
-        thread.start()
+        pid = os.fork()
+        if pid:
+            # Parent process - send signal to process group of the child process
+            atexit.register(os.killpg, pid, signal.SIGTERM)
+        else:
+            # Check if we are not a group leader already (We should not be)
+            if os.getpid() != os.getsid(0):
+                # and create a new process group where we are the leader
+                os.setpgid(0, 0)
+            _run_compile_internally(command_to_execute, dev)
     else:
         return _run_compile_internally(command_to_execute, dev)

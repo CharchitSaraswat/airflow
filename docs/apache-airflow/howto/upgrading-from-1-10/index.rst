@@ -34,7 +34,7 @@ Airflow 1.10 was the last release series to support Python 2. Airflow 2.0.0
 requires Python 3.6+ and has been tested with Python versions 3.6, 3.7 and 3.8.
 Python 3.9 support was added from Airflow 2.1.2.
 
-Airflow 2.3.0 dropped support for Python 3.6. It's tested with Python 3.7, 3.8, 3.9 and 3.10.
+Airflow 2.3.0 dropped support for Python 3.6. It's tested with Python 3.7, 3.8, 3.9, 3.10.
 
 If you have a specific task that still requires Python 2 then you can use the ``@task.virtualenv``, ``@task.docker`` or ``@task.kubernetes`` decorators for this.
 
@@ -879,7 +879,7 @@ Migration Guide from Experimental API to Stable API v1
 
 In Airflow 2.0, we added the new REST API. Experimental API still works, but support may be dropped in the future.
 
-The experimental API however does not require authentication, so it is disabled by default. You need to explicitly enable the experimental API if you want to use it.
+The experimental API, however, does not require authentication, so it is disabled by default. You need to explicitly enable the experimental API if you want to use it.
 If your application is still using the experimental API, you should **seriously** consider migrating to the stable API.
 
 The stable API exposes many endpoints available through the webserver. Here are the

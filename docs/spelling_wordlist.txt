@@ -16,6 +16,8 @@ adls
 afterall
 AgentKey
 aio
+aiobotocore
+AioSession
 Airbnb
 airbnb
 Airbyte
@@ -123,6 +125,7 @@ backfill
 backfillable
 backfilled
 backfilling
+backfilljob
 BackfillJobTest
 Backfills
 backfills
@@ -283,18 +286,21 @@ conn
 connectTimeoutMS
 connexion
 containerConfiguration
+containerd
 ContainerGroup
 containerinstance
 ContainerPort
 contentUrl
 contextmgr
 contrib
+coroutine
 coverals
 cp
 cpu
 cpus
 crd
 createDisposition
+CreateQueryOperator
 creationTimestamp
 credssp
 Cron
@@ -314,6 +320,7 @@ customDataImportUids
 customizability
 customizable
 customizations
+cwd
 cx
 Daemonize
 daemonize
@@ -324,6 +331,7 @@ dagbags
 DagCallbackRequest
 DagFileProcessorManager
 dagmodel
+DagParam
 Dagre
 dagre
 DagRun
@@ -347,6 +355,9 @@ DataFrame
 Dataframe
 dataframe
 dataframes
+DataFusion
+Datafusion
+datafusion
 Datalake
 Datanodes
 datapipe
@@ -417,6 +428,7 @@ deserialize
 Deserialized
 deserialized
 deserializer
+deserializes
 deserializing
 dest
 dev
@@ -435,6 +447,7 @@ discoverability
 discoverable
 diskTypes
 displayName
+DisplayVideo
 distcp
 distro
 distros
@@ -461,6 +474,7 @@ dogstatsd
 donot
 Dont
 DOS'ing
+DownloadReportV
 downscaling
 Drillbit
 Drivy
@@ -493,6 +507,7 @@ emr
 EmrAddSteps
 EmrCreateJobFlow
 enableAutoScale
+encodable
 encryptor
 enqueue
 enqueued
@@ -630,6 +645,7 @@ golang
 googleads
 GoogleAdsRow
 googleapiclient
+GoogleDisplayVideo
 gpu
 gpus
 greenlet
@@ -640,6 +656,7 @@ Grpc
 gRPC
 grpc
 GSoD
+gsuite
 Gunicorn
 gz
 Gzip
@@ -754,6 +771,7 @@ IRSA
 isfile
 ish
 isn
+isort
 iterable
 iterables
 iteratively
@@ -796,6 +814,8 @@ jthomas
 Jupyter
 jupyter
 jupytercmd
+Kafka
+kafka
 Kalibrr
 Kamil
 KEDA
@@ -1006,6 +1026,7 @@ OnFailure
 onkill
 Oozie
 openfaas
+openlineage
 oper
 Opsgenie
 opsgenie
@@ -1021,6 +1042,7 @@ os
 OSS
 oss
 ot
+otel
 overridable
 oversubscription
 Pagerduty
@@ -1241,6 +1263,8 @@ rtype
 ru
 runAsUser
 runnable
+RunQueryOperator
+RunQuerySensor
 runspace
 RunSubmitTaskSettings
 runtime
@@ -1265,6 +1289,7 @@ schedulable
 schedulername
 schemas
 sdk
+sdks
 searchpath
 SearchResultGenerator
 SecretManagerClient
@@ -1529,6 +1554,7 @@ undead
 Undeads
 ungenerated
 unicode
+unindent
 unittest
 unittests
 unix
@@ -1604,6 +1630,7 @@ Webhook
 webhook
 WebhookClient
 webhooks
+webpack
 webpage
 webProperty
 Webserver

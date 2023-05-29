@@ -19,13 +19,20 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any, Union
 
+from airflow.exceptions import AirflowOptionalProviderFeatureException
 from airflow.models import Connection
 from airflow.providers.common.sql.hooks.sql import DbApiHook
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
-    from mysql.connector.abstracts import MySQLConnectionAbstract
+    try:
+        from mysql.connector.abstracts import MySQLConnectionAbstract
+    except ModuleNotFoundError:
+        logger.warning("The package 'mysql-connector-python' is not installed. Import skipped")
     from MySQLdb.connections import Connection as MySQLdbConnection
 
 MySQLConnectionTypes = Union["MySQLdbConnection", "MySQLConnectionAbstract"]
@@ -45,8 +52,12 @@ class MySqlHook(DbApiHook):
     in extras.
     extras example: ``{"iam":true, "aws_conn_id":"my_aws_conn"}``
 
+    You can also add "local_infile" parameter to determine whether local_infile feature of MySQL client is
+    going to be enabled (it is disabled by default).
+
     :param schema: The MySQL database schema to connect to.
     :param connection: The :ref:`MySQL connection id <howto/connection:mysql>` used for MySQL credentials.
+    :param local_infile: Boolean flag determining if local_infile should be used
     """
 
     conn_name_attr = "mysql_conn_id"
@@ -59,6 +70,7 @@ class MySqlHook(DbApiHook):
         super().__init__(*args, **kwargs)
         self.schema = kwargs.pop("schema", None)
         self.connection = kwargs.pop("connection", None)
+        self.local_infile = kwargs.pop("local_infile", False)
 
     def set_autocommit(self, conn: MySQLConnectionTypes, autocommit: bool) -> None:
         """
@@ -73,7 +85,7 @@ class MySqlHook(DbApiHook):
         if hasattr(conn.__class__, "autocommit") and isinstance(conn.__class__.autocommit, property):
             conn.autocommit = autocommit
         else:
-            conn.autocommit(autocommit)
+            conn.autocommit(autocommit)  # type: ignore[operator]
 
     def get_autocommit(self, conn: MySQLConnectionTypes) -> bool:
         """
@@ -88,7 +100,7 @@ class MySqlHook(DbApiHook):
         if hasattr(conn.__class__, "autocommit") and isinstance(conn.__class__.autocommit, property):
             return conn.autocommit
         else:
-            return conn.get_autocommit()
+            return conn.get_autocommit()  # type: ignore[union-attr]
 
     def _get_conn_config_mysql_client(self, conn: Connection) -> dict:
         conn_config = {
@@ -118,7 +130,6 @@ class MySqlHook(DbApiHook):
                 conn_config["cursorclass"] = MySQLdb.cursors.DictCursor
             elif (conn.extra_dejson["cursor"]).lower() == "ssdictcursor":
                 conn_config["cursorclass"] = MySQLdb.cursors.SSDictCursor
-        local_infile = conn.extra_dejson.get("local_infile", False)
         if conn.extra_dejson.get("ssl", False):
             # SSL parameter for MySQL has to be a dictionary and in case
             # of extra/dejson we can get string if extra is passed via
@@ -131,7 +142,7 @@ class MySqlHook(DbApiHook):
             conn_config["ssl_mode"] = conn.extra_dejson["ssl_mode"]
         if conn.extra_dejson.get("unix_socket"):
             conn_config["unix_socket"] = conn.extra_dejson["unix_socket"]
-        if local_infile:
+        if self.local_infile:
             conn_config["local_infile"] = 1
         return conn_config
 
@@ -144,7 +155,7 @@ class MySqlHook(DbApiHook):
             "port": int(conn.port) if conn.port else 3306,
         }
 
-        if conn.extra_dejson.get("allow_local_infile", False):
+        if self.local_infile:
             conn_config["allow_local_infile"] = True
         # Ref: https://dev.mysql.com/doc/connector-python/en/connector-python-connectargs.html
         for key, value in conn.extra_dejson.items():
@@ -177,7 +188,14 @@ class MySqlHook(DbApiHook):
             return MySQLdb.connect(**conn_config)
 
         if client_name == "mysql-connector-python":
-            import mysql.connector
+            try:
+                import mysql.connector
+            except ModuleNotFoundError:
+                raise AirflowOptionalProviderFeatureException(
+                    "The pip package 'mysql-connector-python' is not installed, therefore the connection "
+                    "wasn't established. Please, consider using default driver or pip install the package "
+                    "'mysql-connector-python'. Warning! It might cause dependency conflicts."
+                )
 
             conn_config = self._get_conn_config_mysql_connector_python(conn)
             return mysql.connector.connect(**conn_config)
@@ -195,7 +213,7 @@ class MySqlHook(DbApiHook):
             """
         )
         conn.commit()
-        conn.close()
+        conn.close()  # type: ignore[misc]
 
     def bulk_dump(self, table: str, tmp_file: str) -> None:
         """Dump a database table into a tab-delimited file."""
@@ -208,7 +226,7 @@ class MySqlHook(DbApiHook):
             """
         )
         conn.commit()
-        conn.close()
+        conn.close()  # type: ignore[misc]
 
     @staticmethod
     def _serialize_cell(cell: object, conn: Connection | None = None) -> Any:
@@ -279,4 +297,4 @@ class MySqlHook(DbApiHook):
 
         cursor.close()
         conn.commit()
-        conn.close()
+        conn.close()  # type: ignore[misc]

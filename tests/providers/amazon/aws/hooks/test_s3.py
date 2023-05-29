@@ -444,9 +444,9 @@ class TestAwsS3Hook:
             temp_file.write(b"Content")
             temp_file.seek(0)
             hook.load_file_obj(temp_file, "my_key", s3_bucket)
-            hook.copy_object("my_key", "my_key", s3_bucket, s3_bucket)
+            hook.copy_object("my_key", "my_key2", s3_bucket, s3_bucket)
             response = boto3.client("s3").get_object_acl(
-                Bucket=s3_bucket, Key="my_key", RequestPayer="requester"
+                Bucket=s3_bucket, Key="my_key2", RequestPayer="requester"
             )
             assert (response["Grants"][0]["Permission"] == "FULL_CONTROL") and (len(response["Grants"]) == 1)
 
@@ -467,16 +467,24 @@ class TestAwsS3Hook:
             assert mock_hook.delete_bucket(bucket_name=s3_bucket, force_delete=True)
         assert ctx.value.response["Error"]["Code"] == "NoSuchBucket"
 
-    @mock.patch.object(S3Hook, "get_connection", return_value=Connection(schema="test_bucket"))
+    @mock.patch.object(
+        S3Hook,
+        "get_connection",
+        return_value=Connection(extra={"service_config": {"s3": {"bucket_name": "bucket_name"}}}),
+    )
     def test_provide_bucket_name(self, mock_get_connection):
         class FakeS3Hook(S3Hook):
             @provide_bucket_name
             def test_function(self, bucket_name=None):
                 return bucket_name
 
-        hook = FakeS3Hook()
-        assert hook.test_function() == "test_bucket"
-        assert hook.test_function(bucket_name="bucket") == "bucket"
+        fake_s3_hook = FakeS3Hook()
+
+        test_bucket_name = fake_s3_hook.test_function()
+        assert test_bucket_name == "bucket_name"
+
+        test_bucket_name = fake_s3_hook.test_function(bucket_name="bucket")
+        assert test_bucket_name == "bucket"
 
     def test_delete_objects_key_does_not_exist(self, s3_bucket):
         # The behaviour of delete changed in recent version of s3 mock libraries.
@@ -725,6 +733,15 @@ class TestAwsS3Hook:
         hook.put_bucket_tagging(bucket_name="new_bucket", tag_set=tag_set)
 
         assert hook.get_bucket_tagging(bucket_name="new_bucket") == tag_set
+
+    @mock_s3
+    def test_put_bucket_tagging_with_dict(self):
+        hook = S3Hook()
+        hook.create_bucket(bucket_name="new_bucket")
+        tag_set = {"Color": "Green"}
+        hook.put_bucket_tagging(bucket_name="new_bucket", tag_set=tag_set)
+
+        assert hook.get_bucket_tagging(bucket_name="new_bucket") == [{"Key": "Color", "Value": "Green"}]
 
     @mock_s3
     def test_put_bucket_tagging_with_pair(self):

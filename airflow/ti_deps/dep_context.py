@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import attr
 from sqlalchemy.orm.session import Session
 
+from airflow.exceptions import TaskNotFound
 from airflow.utils.state import State
 
 if TYPE_CHECKING:
@@ -77,6 +78,7 @@ class DepContext:
     ignore_ti_state: bool = False
     ignore_unmapped_tasks: bool = False
     finished_tis: list[TaskInstance] | None = None
+    description: str | None = None
 
     have_changed_ti_states: bool = False
     """Have any of the TIs state's been changed as a result of evaluating dependencies"""
@@ -91,6 +93,13 @@ class DepContext:
         """
         if self.finished_tis is None:
             finished_tis = dag_run.get_task_instances(state=State.finished, session=session)
+            for ti in finished_tis:
+                if not hasattr(ti, "task") and dag_run.dag:
+                    try:
+                        ti.task = dag_run.dag.get_task(ti.task_id)
+                    except TaskNotFound:
+                        pass
+
             self.finished_tis = finished_tis
         else:
             finished_tis = self.finished_tis
